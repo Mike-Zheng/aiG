@@ -38,7 +38,7 @@
         left: 0;
         width: 100%;
         height: 100vh;
-        display: flex;
+        display: none;
         align-items: center;
         justify-content: center;
         z-index: 100;
@@ -118,7 +118,8 @@
         align-items: center;
         justify-content: center;
         z-index: 100;
-        display: none;
+        display: flex;
+        cursor: pointer;
       }
 
       .loading-spinner {
@@ -726,13 +727,50 @@
       let engine = new GalleryEngine(galleryContainer);
       let currentModalUrl = null;
 
+      // 點擊解鎖計數器
+      let clickCount = 0;
+      const UNLOCK_CLICKS = 20;
+      let unlockHandler = null;
+
+      // 解鎖upload按鈕功能
+      function initUnlockFeature() {
+        unlockHandler = () => {
+          clickCount++;
+          console.log(`🔒 解鎖進度: ${clickCount}/${UNLOCK_CLICKS}`);
+          
+          if (clickCount >= UNLOCK_CLICKS) {
+            // 隱藏loading，顯示upload
+            loadingEl.style.display = 'none';
+            uploadSection.style.display = 'flex';
+            
+            // 移除點擊監聽器
+            document.body.removeEventListener('click', unlockHandler);
+            unlockHandler = null;
+            
+            console.log('✅ 已解鎖上傳功能');
+          }
+        };
+        
+        document.body.addEventListener('click', unlockHandler);
+      }
+
+      // 初始化解鎖功能
+      initUnlockFeature();
+
       // 檔案選擇事件
       fileInput.addEventListener("change", async (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
+        // 確保移除解鎖監聽器（如果還存在）
+        if (unlockHandler) {
+          document.body.removeEventListener('click', unlockHandler);
+          unlockHandler = null;
+        }
+
         uploadSection.style.display = "none";
         loadingEl.style.display = "flex";
+        loadingEl.style.cursor = "default"; // 改為普通鼠標
 
         try {
           await engine.loadFromFile(file);
@@ -864,7 +902,7 @@
           engine.dispose();
           engine = new GalleryEngine(galleryContainer);
 
-          // 重置 UI 狀態
+          // 重置 UI 狀態（不重新啟動解鎖功能）
           destroyBtn.classList.remove("visible");
           uploadSection.style.display = "flex";
           loadingEl.style.display = "none";
