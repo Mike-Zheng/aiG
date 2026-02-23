@@ -2,7 +2,7 @@
   "name": "aiG",
   "short_name": "aiG",
   "description": "aiG",
-  "start_url": "/index.html",
+  "start_url": "/aiG/index.html",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#667eea",
