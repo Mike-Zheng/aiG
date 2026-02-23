@@ -1,11 +1,13 @@
 {
-  "name": "webp-gallery-engine",
+  "name": "aiG",
+  "author": "mikezheng",
   "version": "1.0.0",
-  "description": "行動端極致效能 WebP 動畫圖庫 (Vanilla JS 零依賴方案)",
   "type": "module",
   "scripts": {
     "build": "node scripts/build-bin.js",
-    "dev": "npx http-server -p 8080 -o"
+    "icons": "node scripts/generate-icons.js",
+    "dev": "npx http-server -p 8080 -o",
+    "setup": "npm run icons && npm run build"
   },
   "keywords": [
     "webp",
@@ -13,12 +15,13 @@
     "gallery",
     "vanilla-js",
     "mobile-optimized",
-    "ios"
+    "ios",
+    "pwa",
+    "offline"
   ],
-  "author": "",
-  "license": "MIT",
   "devDependencies": {
     "sharp": "^0.33.0",
-    "http-server": "^14.1.1"
+    "http-server": "^14.1.1",
+    "canvas": "^2.11.2"
   }
 }
