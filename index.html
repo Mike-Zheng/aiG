@@ -58,15 +58,14 @@
 
       .upload-btn {
         display: inline-block;
-        padding: 15px 40px;
-        /* background: rgba(255, 255, 255, 0.1); */
+        padding: 8px 24px;
+        background: #4a4b50;
         color: white;
         border-radius: 5px;
-        font-size: 16px;
+        font-size: 10px;
         font-weight: 600;
         cursor: pointer;
         transition: all 0.3s ease;
-        border: 1px solid rgba(255, 255, 255, 0.2);
       }
 
       .upload-btn:hover {
@@ -81,12 +80,12 @@
       .destroy-btn {
         position: fixed;
         top: 10px;
-        right: 10px;
+        left: 5px;
         padding: 5px 24px;
-        background: rgba(255, 100, 100, 0.2);
+        background: #4a4b50;
         color: #fff;
-        border: 2px solid rgba(255, 100, 100, 0.4);
-        border-radius: 5px;
+        border: none;
+        border-radius: 2px;
         font-size: 14px;
         font-weight: 600;
         cursor: pointer;
@@ -111,11 +110,14 @@
       }
 
       .loading {
-        text-align: center;
-        padding: 60px 20px;
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 5px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100vh;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
         display: none;
       }
 
@@ -163,13 +165,12 @@
       #gallery {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        gap: 16px;
+        gap: 5px;
         margin-top: 50px;
       }
 
       .gallery-item {
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 5px;
+        border-radius: 3px;
         overflow: hidden;
         border: 1px solid rgba(255, 255, 255, 0.1);
         transition: all 0.3s ease;
@@ -230,11 +231,11 @@
 
       .fullscreen-icon {
         position: absolute;
-        bottom: 12px;
-        right: 12px;
-        width: 40px;
-        height: 40px;
-        background: rgba(0, 0, 0, 0.6);
+        bottom: 5px;
+        right: 5px;
+        width: 30px;
+        height: 30px;
+        background: rgba(0, 0, 0, 0.2);
         border-radius: 50%;
         display: flex;
         align-items: center;
@@ -243,7 +244,6 @@
         transition: all 0.3s ease;
         z-index: 10;
         backdrop-filter: blur(10px);
-        border: 2px solid rgba(255, 255, 255, 0.2);
       }
 
       .fullscreen-icon:hover {
@@ -328,13 +328,13 @@
 
       @media (max-width: 600px) {
         body {
-          padding: 10px;
+          padding: 5px;
           padding-bottom: 60px;
         }
 
         #gallery {
-          grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-          gap: 12px;
+          grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+          gap: 5px;
         }
 
         .modal-content img {
@@ -352,9 +352,21 @@
     </style>
   </head>
   <body>
-    <button class="destroy-btn" id="destroy-btn"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
-	<path fill="currentColor" fill-rule="evenodd" d="M5.75 3V1.5h4.5V3zm-1.5 0V1a1 1 0 0 1 1-1h5.5a1 1 0 0 1 1 1v2h2.5a.75.75 0 0 1 0 1.5h-.365l-.743 9.653A2 2 0 0 1 11.148 16H4.852a2 2 0 0 1-1.994-1.847L2.115 4.5H1.75a.75.75 0 0 1 0-1.5zm-.63 1.5h8.76l-.734 9.538a.5.5 0 0 1-.498.462H4.852a.5.5 0 0 1-.498-.462z" clip-rule="evenodd" />
-</svg></button>
+    <button class="destroy-btn" id="destroy-btn">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        viewBox="0 0 16 16"
+      >
+        <path
+          fill="currentColor"
+          fill-rule="evenodd"
+          d="M5.75 3V1.5h4.5V3zm-1.5 0V1a1 1 0 0 1 1-1h5.5a1 1 0 0 1 1 1v2h2.5a.75.75 0 0 1 0 1.5h-.365l-.743 9.653A2 2 0 0 1 11.148 16H4.852a2 2 0 0 1-1.994-1.847L2.115 4.5H1.75a.75.75 0 0 1 0-1.5zm-.63 1.5h8.76l-.734 9.538a.5.5 0 0 1-.498.462H4.852a.5.5 0 0 1-.498-.462z"
+          clip-rule="evenodd"
+        />
+      </svg>
+    </button>
 
     <div class="upload-section" id="upload-section">
       <div class="file-input-wrapper">
@@ -362,8 +374,8 @@
         <label for="file-input" class="upload-btn">
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
+            width="20"
+            height="20"
             viewBox="0 0 24 24"
           >
             <path
@@ -382,16 +394,41 @@
     <div id="gallery"></div>
 
     <div class="modal" id="modal">
-      <div class="modal-close" id="modal-close"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-	<g fill="none" stroke="currentColor" stroke-dasharray="22" stroke-linecap="round" stroke-linejoin="round" stroke-width="1">
-		<path d="M5 5l14 14">
-			<animate fill="freeze" attributeName="stroke-dashoffset" dur="0.5s" values="22;0" />
-		</path>
-		<path stroke-dashoffset="22" d="M19 5l-14 14">
-			<animate fill="freeze" attributeName="stroke-dashoffset" begin="0.5s" dur="0.5s" to="0" />
-		</path>
-	</g>
-</svg></div>
+      <div class="modal-close" id="modal-close">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+        >
+          <g
+            fill="none"
+            stroke="currentColor"
+            stroke-dasharray="22"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1"
+          >
+            <path d="M5 5l14 14">
+              <animate
+                fill="freeze"
+                attributeName="stroke-dashoffset"
+                dur="0.5s"
+                values="22;0"
+              />
+            </path>
+            <path stroke-dashoffset="22" d="M19 5l-14 14">
+              <animate
+                fill="freeze"
+                attributeName="stroke-dashoffset"
+                begin="0.5s"
+                dur="0.5s"
+                to="0"
+              />
+            </path>
+          </g>
+        </svg>
+      </div>
       <div class="modal-content">
         <img id="modal-img" src="" alt="" />
       </div>
@@ -695,7 +732,7 @@
         if (!file) return;
 
         uploadSection.style.display = "none";
-        loadingEl.style.display = "block";
+        loadingEl.style.display = "flex";
 
         try {
           await engine.loadFromFile(file);
@@ -829,7 +866,7 @@
 
           // 重置 UI 狀態
           destroyBtn.classList.remove("visible");
-          uploadSection.style.display = "block";
+          uploadSection.style.display = "flex";
           loadingEl.style.display = "none";
           fileInput.value = ""; // 清空文件選擇，允許重新選擇同一檔案
 
