@@ -1,799 +1,876 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#37383C">
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icon-192.png">
-  <title>aiG</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #37383C;
-      padding: 20px;
-      line-height: 1.6;
-      padding-bottom: 80px;
-      min-height: 100vh;
-    }
-
-    .upload-section {
-      padding: 40px 20px;
-      border-radius: 12px;
-      margin-bottom: 20px;
-      text-align: center;
-    }
-
-    .file-input-wrapper {
-      position: relative;
-      display: inline-block;
-    }
-
-    .file-input-wrapper input[type="file"] {
-      position: absolute;
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-
-    .upload-btn {
-      display: inline-block;
-      padding: 15px 40px;
-      /* background: rgba(255, 255, 255, 0.1); */
-      color: white;
-      border-radius: 5px;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-
-    .upload-btn:hover {
-      background: rgba(255, 255, 255, 0.15);
-      transform: translateY(-2px);
-    }
-
-    .upload-btn:active {
-      transform: translateY(0);
-    }
-
-    .destroy-btn {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      padding: 12px 24px;
-      background: rgba(255, 100, 100, 0.2);
-      color: #ff6b6b;
-      border: 2px solid rgba(255, 100, 100, 0.4);
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      z-index: 1000;
-      display: none;
-      backdrop-filter: blur(10px);
-    }
-
-    .destroy-btn:hover {
-      background: rgba(255, 100, 100, 0.3);
-      transform: scale(1.05);
-    }
-
-    .destroy-btn:active {
-      transform: scale(0.95);
-    }
-
-    .destroy-btn.visible {
-      display: block;
-      animation: fadeIn 0.3s ease-out;
-    }
-
-    .loading {
-      text-align: center;
-      padding: 60px 20px;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 5px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      display: none;
-    }
-
-    .loading-spinner {
-      width: 50px;
-      height: 50px;
-      margin: 0 auto 20px;
-      border: 4px solid rgba(255, 255, 255, 0.1);
-      border-top: 4px solid rgba(255, 255, 255, 0.4);
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-        transform: translateY(20px);
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="theme-color" content="#37383C" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
+    <title>aiG</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
       }
-      to {
-        opacity: 1;
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #37383c;
+        padding: 20px;
+        line-height: 1.6;
+        padding-bottom: 80px;
+        min-height: 100vh;
+      }
+
+      .upload-section {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+      }
+
+      .file-input-wrapper {
+        position: relative;
+        display: inline-block;
+      }
+
+      .file-input-wrapper input[type="file"] {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .upload-btn {
+        display: inline-block;
+        padding: 15px 40px;
+        /* background: rgba(255, 255, 255, 0.1); */
+        color: white;
+        border-radius: 5px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .upload-btn:hover {
+        background: rgba(255, 255, 255, 0.15);
+        transform: translateY(-2px);
+      }
+
+      .upload-btn:active {
         transform: translateY(0);
       }
-    }
 
-    @keyframes scaleIn {
-      from {
-        opacity: 0;
-        transform: scale(0.9);
+      .destroy-btn {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        padding: 5px 24px;
+        background: rgba(255, 100, 100, 0.2);
+        color: #fff;
+        border: 2px solid rgba(255, 100, 100, 0.4);
+        border-radius: 5px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        z-index: 1000;
+        display: none;
+        backdrop-filter: blur(10px);
       }
-      to {
-        opacity: 1;
-        transform: scale(1);
+
+      .destroy-btn:hover {
+        background: rgba(255, 100, 100, 0.3);
+        transform: scale(1.05);
       }
-    }
 
-    #gallery {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 16px;
-      margin-top: 20px;
-    }
+      .destroy-btn:active {
+        transform: scale(0.95);
+      }
 
-    .gallery-item {
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 5px;
-      overflow: hidden;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      transition: all 0.3s ease;
-      position: relative;
-      animation: fadeIn 0.5s ease-out backwards;
-      cursor: pointer;
-      min-height: 150px;
-    }
+      .destroy-btn.visible {
+        display: block;
+        animation: fadeIn 0.3s ease-out;
+      }
 
-    .gallery-item.placeholder {
-      background: rgba(255, 255, 255, 0.02);
-    }
+      .loading {
+        text-align: center;
+        padding: 60px 20px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 5px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        display: none;
+      }
 
-    .gallery-item:nth-child(1) { animation-delay: 0.05s; }
-    .gallery-item:nth-child(2) { animation-delay: 0.1s; }
-    .gallery-item:nth-child(3) { animation-delay: 0.15s; }
-    .gallery-item:nth-child(4) { animation-delay: 0.2s; }
-    .gallery-item:nth-child(5) { animation-delay: 0.25s; }
-    .gallery-item:nth-child(6) { animation-delay: 0.3s; }
-    .gallery-item:nth-child(7) { animation-delay: 0.35s; }
-    .gallery-item:nth-child(8) { animation-delay: 0.4s; }
+      .loading-spinner {
+        width: 50px;
+        height: 50px;
+        margin: 0 auto 20px;
+        border: 4px solid rgba(255, 255, 255, 0.1);
+        border-top: 4px solid rgba(255, 255, 255, 0.4);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
 
-    .gallery-item:hover {
-      transform: translateY(-4px);
-      border-color: rgba(255, 255, 255, 0.2);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-    }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
 
-    .gallery-item img {
-      width: 100%;
-      height: auto;
-      display: block;
-      -webkit-user-select: none;
-      user-select: none;
-      cursor: pointer;
-      transition: transform 0.3s ease;
-    }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
 
-    .gallery-item:hover img {
-      transform: scale(1.05);
-    }
-
-    .fullscreen-icon {
-      position: absolute;
-      bottom: 12px;
-      right: 12px;
-      width: 40px;
-      height: 40px;
-      background: rgba(0, 0, 0, 0.6);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      z-index: 10;
-      backdrop-filter: blur(10px);
-      border: 2px solid rgba(255, 255, 255, 0.2);
-    }
-
-    .fullscreen-icon:hover {
-      background: rgba(0, 0, 0, 0.8);
-      transform: scale(1.1);
-      border-color: rgba(255, 255, 255, 0.4);
-    }
-
-    .fullscreen-icon svg {
-      width: 20px;
-      height: 20px;
-      fill: white;
-    }
-
-    .modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.95);
-      z-index: 9999;
-      align-items: center;
-      justify-content: center;
-      animation: fadeIn 0.3s ease-out;
-    }
-
-    .modal.active {
-      display: flex;
-    }
-
-    .modal-content {
-      position: relative;
-      max-width: 90vw;
-      max-height: 90vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      animation: scaleIn 0.4s ease-out;
-    }
-
-    .modal-content img {
-      max-width: 100%;
-      max-height: 90vh;
-      object-fit: contain;
-    }
-
-    .modal-close {
-      position: absolute;
-      top: 20px;
-      right: 20px;
-      width: 50px;
-      height: 50px;
-      background: rgba(255, 255, 255, 0.1);
-      border: 2px solid rgba(255, 255, 255, 0.3);
-      border-radius: 50%;
-      color: white;
-      font-size: 24px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.3s ease;
-      z-index: 10000;
-    }
-
-    .modal-close:hover {
-      background: rgba(255, 255, 255, 0.2);
-      transform: rotate(90deg);
-    }
-
-    .error {
-      background: rgba(255, 100, 100, 0.1);
-      border: 2px solid rgba(255, 100, 100, 0.3);
-      color: #ff6b6b;
-      padding: 20px;
-      border-radius: 12px;
-      margin-top: 20px;
-    }
-
-    @media (max-width: 600px) {
-      body {
-        padding: 10px;
-        padding-bottom: 60px;
+      @keyframes scaleIn {
+        from {
+          opacity: 0;
+          transform: scale(0.9);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
       }
 
       #gallery {
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-        gap: 12px;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 16px;
+        margin-top: 50px;
+      }
+
+      .gallery-item {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 5px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        transition: all 0.3s ease;
+        position: relative;
+        animation: fadeIn 0.5s ease-out backwards;
+        cursor: pointer;
+        min-height: 150px;
+      }
+
+      .gallery-item.placeholder {
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .gallery-item:nth-child(1) {
+        animation-delay: 0.05s;
+      }
+      .gallery-item:nth-child(2) {
+        animation-delay: 0.1s;
+      }
+      .gallery-item:nth-child(3) {
+        animation-delay: 0.15s;
+      }
+      .gallery-item:nth-child(4) {
+        animation-delay: 0.2s;
+      }
+      .gallery-item:nth-child(5) {
+        animation-delay: 0.25s;
+      }
+      .gallery-item:nth-child(6) {
+        animation-delay: 0.3s;
+      }
+      .gallery-item:nth-child(7) {
+        animation-delay: 0.35s;
+      }
+      .gallery-item:nth-child(8) {
+        animation-delay: 0.4s;
+      }
+
+      .gallery-item:hover {
+        transform: translateY(-4px);
+        border-color: rgba(255, 255, 255, 0.2);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+      }
+
+      .gallery-item img {
+        width: 100%;
+        height: auto;
+        display: block;
+        -webkit-user-select: none;
+        user-select: none;
+        cursor: pointer;
+        transition: transform 0.3s ease;
+      }
+
+      .gallery-item:hover img {
+        transform: scale(1.05);
+      }
+
+      .fullscreen-icon {
+        position: absolute;
+        bottom: 12px;
+        right: 12px;
+        width: 40px;
+        height: 40px;
+        background: rgba(0, 0, 0, 0.6);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        z-index: 10;
+        backdrop-filter: blur(10px);
+        border: 2px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .fullscreen-icon:hover {
+        background: rgba(0, 0, 0, 0.8);
+        transform: scale(1.1);
+        border-color: rgba(255, 255, 255, 0.4);
+      }
+
+      .fullscreen-icon svg {
+        width: 20px;
+        height: 20px;
+        fill: white;
+      }
+
+      .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.95);
+        z-index: 9999;
+        align-items: center;
+        justify-content: center;
+        animation: fadeIn 0.3s ease-out;
+      }
+
+      .modal.active {
+        display: flex;
+      }
+
+      .modal-content {
+        position: relative;
+        max-width: 90vw;
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        animation: scaleIn 0.4s ease-out;
       }
 
       .modal-content img {
+        max-width: 100%;
         max-height: 90vh;
+        object-fit: contain;
       }
 
       .modal-close {
-        top: 10px;
-        right: 10px;
-        width: 40px;
-        height: 40px;
-        font-size: 20px;
-      }
-    }
-  </style>
-</head>
-<body>
-  <button class="destroy-btn" id="destroy-btn">🗑️ 銷毀資源</button>
-  
-  <div class="upload-section" id="upload-section">
-    <div class="file-input-wrapper">
-      <input type="file" id="file-input" accept=".bin">
-      <label for="file-input" class="upload-btn">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-	<path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm4 18H6V4h7v5h5z" />
-</svg>
-      </label>
-    </div>
-  </div>
-
-  <div class="loading" id="loading">
-    <div class="loading-spinner"></div>
-  </div>
-
-  <div id="gallery"></div>
-
-  <div class="modal" id="modal">
-    <div class="modal-close" id="modal-close">×</div>
-    <div class="modal-content">
-      <img id="modal-img" src="" alt="">
-    </div>
-  </div>
-
-  <script>
-    // ==================== GalleryEngine 核心引擎 ====================
-    class GalleryEngine {
-      constructor(containerElement) {
-        this.container = containerElement;
-        this.buffer = null;
-        this.indexMap = null;
-        this.payloadStart = 0;
-
-        // 狀態管理
-        this.thumbUrls = new Map(); 
-        this.activeState = { 
-          id: null, 
-          imgEl: null, 
-          animUrl: null 
-        };
-
-        // Virtual Scroller 狀態
-        this.allIds = [];
-        this.renderedItems = new Map(); // id -> {element, isLoaded}
-        this.loadedThumbs = new Set(); // 已加載的縮圖 ID
-
-        // 離開視窗自動回收機制 (防 iOS 崩潰核心)
-        this.animationObserver = new IntersectionObserver((entries) => {
-          entries.forEach(entry => {
-            if (!entry.isIntersecting && entry.target === this.activeState.imgEl) {
-              this.stopActiveAnimation();
-            }
-          });
-        }, { threshold: 0 });
-
-        // Virtual Scroller 觀察器 - 管理所有圖片的加載與卸載
-        this.virtualObserver = new IntersectionObserver((entries) => {
-          entries.forEach(entry => {
-            const id = entry.target.dataset.id;
-            if (!id) return;
-
-            if (entry.isIntersecting) {
-              // 進入視窗 - 加載縮圖
-              this.loadThumbnail(id, entry.target);
-            } else {
-              // 離開視窗 - 卸載圖片（但保留 DOM 結構）
-              this.unloadThumbnail(id, entry.target);
-            }
-          });
-        }, { 
-          rootMargin: '200px', // 提前 200px 開始加載
-          threshold: 0 
-        });
-
-        // 綁定事件代理 (Fast Click)
-        this.handleTap = this.handleTap.bind(this);
-        this.container.addEventListener('click', this.handleTap);
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        width: 50px;
+        height: 50px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        color: white;
+        font-size: 24px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+        z-index: 10000;
       }
 
-      async loadFromFile(file) {
-        console.log('🔄 正在載入資料庫...');
-        
-        try {
-          this.buffer = await file.arrayBuffer();
-          const dataView = new DataView(this.buffer);
-          
-          // 讀取 Header (4 bytes)：JSON 索引長度
-          const headerLen = dataView.getUint32(0, true);
-          
-          // 解析 JSON 索引
-          const jsonStr = new TextDecoder().decode(
-            new Uint8Array(this.buffer, 4, headerLen)
+      .modal-close:hover {
+        background: rgba(255, 255, 255, 0.2);
+        transform: rotate(90deg);
+      }
+
+      .error {
+        background: rgba(255, 100, 100, 0.1);
+        border: 2px solid rgba(255, 100, 100, 0.3);
+        color: #ff6b6b;
+        padding: 20px;
+        border-radius: 12px;
+        margin-top: 20px;
+      }
+
+      @media (max-width: 600px) {
+        body {
+          padding: 10px;
+          padding-bottom: 60px;
+        }
+
+        #gallery {
+          grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+          gap: 12px;
+        }
+
+        .modal-content img {
+          max-height: 90vh;
+        }
+
+        .modal-close {
+          top: 10px;
+          right: 10px;
+          width: 40px;
+          height: 40px;
+          font-size: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <button class="destroy-btn" id="destroy-btn"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+	<path fill="currentColor" fill-rule="evenodd" d="M5.75 3V1.5h4.5V3zm-1.5 0V1a1 1 0 0 1 1-1h5.5a1 1 0 0 1 1 1v2h2.5a.75.75 0 0 1 0 1.5h-.365l-.743 9.653A2 2 0 0 1 11.148 16H4.852a2 2 0 0 1-1.994-1.847L2.115 4.5H1.75a.75.75 0 0 1 0-1.5zm-.63 1.5h8.76l-.734 9.538a.5.5 0 0 1-.498.462H4.852a.5.5 0 0 1-.498-.462z" clip-rule="evenodd" />
+</svg></button>
+
+    <div class="upload-section" id="upload-section">
+      <div class="file-input-wrapper">
+        <input type="file" id="file-input" accept=".bin" />
+        <label for="file-input" class="upload-btn">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+          >
+            <path
+              fill="currentColor"
+              d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm4 18H6V4h7v5h5z"
+            />
+          </svg>
+        </label>
+      </div>
+    </div>
+
+    <div class="loading" id="loading">
+      <div class="loading-spinner"></div>
+    </div>
+
+    <div id="gallery"></div>
+
+    <div class="modal" id="modal">
+      <div class="modal-close" id="modal-close"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+	<g fill="none" stroke="currentColor" stroke-dasharray="22" stroke-linecap="round" stroke-linejoin="round" stroke-width="1">
+		<path d="M5 5l14 14">
+			<animate fill="freeze" attributeName="stroke-dashoffset" dur="0.5s" values="22;0" />
+		</path>
+		<path stroke-dashoffset="22" d="M19 5l-14 14">
+			<animate fill="freeze" attributeName="stroke-dashoffset" begin="0.5s" dur="0.5s" to="0" />
+		</path>
+	</g>
+</svg></div>
+      <div class="modal-content">
+        <img id="modal-img" src="" alt="" />
+      </div>
+    </div>
+
+    <script>
+      // ==================== GalleryEngine 核心引擎 ====================
+      class GalleryEngine {
+        constructor(containerElement) {
+          this.container = containerElement;
+          this.buffer = null;
+          this.indexMap = null;
+          this.payloadStart = 0;
+
+          // 狀態管理
+          this.thumbUrls = new Map();
+          this.activeState = {
+            id: null,
+            imgEl: null,
+            animUrl: null,
+          };
+
+          // Virtual Scroller 狀態
+          this.allIds = [];
+          this.renderedItems = new Map(); // id -> {element, isLoaded}
+          this.loadedThumbs = new Set(); // 已加載的縮圖 ID
+
+          // 離開視窗自動回收機制 (防 iOS 崩潰核心)
+          this.animationObserver = new IntersectionObserver(
+            (entries) => {
+              entries.forEach((entry) => {
+                if (
+                  !entry.isIntersecting &&
+                  entry.target === this.activeState.imgEl
+                ) {
+                  this.stopActiveAnimation();
+                }
+              });
+            },
+            { threshold: 0 },
           );
-          this.indexMap = JSON.parse(jsonStr);
-          
-          // 計算 Payload 起始位置
-          this.payloadStart = 4 + headerLen;
 
-          console.log(`✅ 載入完成：共 ${Object.keys(this.indexMap).length} 個項目`);
-          console.log(`   資料大小：${(this.buffer.byteLength / 1024 / 1024).toFixed(2)} MB`);
+          // Virtual Scroller 觀察器 - 管理所有圖片的加載與卸載
+          this.virtualObserver = new IntersectionObserver(
+            (entries) => {
+              entries.forEach((entry) => {
+                const id = entry.target.dataset.id;
+                if (!id) return;
 
-          // 初始化所有縮圖
-          this.initThumbnails();
-          
-          return this.indexMap;
+                if (entry.isIntersecting) {
+                  // 進入視窗 - 加載縮圖
+                  this.loadThumbnail(id, entry.target);
+                } else {
+                  // 離開視窗 - 卸載圖片（但保留 DOM 結構）
+                  this.unloadThumbnail(id, entry.target);
+                }
+              });
+            },
+            {
+              rootMargin: "200px", // 提前 200px 開始加載
+              threshold: 0,
+            },
+          );
+
+          // 綁定事件代理 (Fast Click)
+          this.handleTap = this.handleTap.bind(this);
+          this.container.addEventListener("click", this.handleTap);
+        }
+
+        async loadFromFile(file) {
+          console.log("🔄 正在載入資料庫...");
+
+          try {
+            this.buffer = await file.arrayBuffer();
+            const dataView = new DataView(this.buffer);
+
+            // 讀取 Header (4 bytes)：JSON 索引長度
+            const headerLen = dataView.getUint32(0, true);
+
+            // 解析 JSON 索引
+            const jsonStr = new TextDecoder().decode(
+              new Uint8Array(this.buffer, 4, headerLen),
+            );
+            this.indexMap = JSON.parse(jsonStr);
+
+            // 計算 Payload 起始位置
+            this.payloadStart = 4 + headerLen;
+
+            console.log(
+              `✅ 載入完成：共 ${Object.keys(this.indexMap).length} 個項目`,
+            );
+            console.log(
+              `   資料大小：${(this.buffer.byteLength / 1024 / 1024).toFixed(2)} MB`,
+            );
+
+            // 初始化所有縮圖
+            this.initThumbnails();
+
+            return this.indexMap;
+          } catch (error) {
+            console.error("❌ 載入失敗:", error);
+            throw error;
+          }
+        }
+
+        initThumbnails() {
+          console.log("🖼️  準備 Virtual Scroller (延遲加載模式)...");
+          this.allIds = Object.keys(this.indexMap);
+          console.log(
+            `✅ 準備完成：共 ${this.allIds.length} 個項目（僅可視範圍會加載）`,
+          );
+        }
+
+        loadThumbnail(id, itemElement) {
+          if (this.loadedThumbs.has(id)) return; // 已加載
+
+          const meta = this.indexMap[id];
+          if (!meta) return;
+
+          const slice = this.buffer.slice(
+            this.payloadStart + meta.thumb.offset,
+            this.payloadStart + meta.thumb.offset + meta.thumb.length,
+          );
+          const thumbUrl = URL.createObjectURL(
+            new Blob([slice], { type: "image/webp" }),
+          );
+          this.thumbUrls.set(id, thumbUrl);
+          this.loadedThumbs.add(id);
+
+          // 更新 DOM
+          const img = itemElement.querySelector("img");
+          if (img) {
+            img.src = thumbUrl;
+            itemElement.classList.remove("placeholder");
+            console.log(`✅ 加載縮圖: ${id}`);
+          }
+        }
+
+        unloadThumbnail(id, itemElement) {
+          if (!this.loadedThumbs.has(id)) return; // 未加載
+
+          // 如果正在播放動畫，不要卸載
+          if (this.activeState.id === id) return;
+
+          const thumbUrl = this.thumbUrls.get(id);
+          if (thumbUrl) {
+            URL.revokeObjectURL(thumbUrl);
+            this.thumbUrls.delete(id);
+          }
+          this.loadedThumbs.delete(id);
+
+          // 移除圖片但保留佔位符
+          const img = itemElement.querySelector("img");
+          if (img) {
+            img.src = "";
+            itemElement.classList.add("placeholder");
+            console.log(`🗑️  卸載縮圖: ${id}`);
+          }
+        }
+
+        getItemData(id) {
+          if (!this.indexMap || !this.indexMap[id]) {
+            console.warn(`⚠️  項目不存在: ${id}`);
+            return null;
+          }
+
+          return {
+            url: this.thumbUrls.get(id),
+            width: this.indexMap[id].width,
+            height: this.indexMap[id].height,
+          };
+        }
+
+        getAllIds() {
+          return this.indexMap ? Object.keys(this.indexMap) : [];
+        }
+
+        handleTap(e) {
+          const target = e.target;
+          if (target.tagName !== "IMG" || !target.dataset.id) return;
+
+          const id = target.dataset.id;
+
+          // 點擊同一個正在播放的 -> 停止
+          if (this.activeState.id === id) {
+            console.log(`⏹️  停止動畫: ${id}`);
+            this.stopActiveAnimation();
+            return;
+          }
+
+          // 點擊新的 -> 先停止舊的，再播新的
+          if (this.activeState.id) {
+            console.log(`⏹️  停止前一個動畫: ${this.activeState.id}`);
+            this.stopActiveAnimation();
+          }
+
+          // JIT 建立動畫 Blob
+          console.log(`▶️  播放動畫: ${id}`);
+          this.playAnimation(id, target);
+        }
+
+        playAnimation(id, imgEl) {
+          const meta = this.indexMap[id];
+          if (!meta) {
+            console.warn(`⚠️  動畫不存在: ${id}`);
+            return;
+          }
+
+          // 從 ArrayBuffer 切割動畫資料 (Zero-copy)
+          const slice = this.buffer.slice(
+            this.payloadStart + meta.anim.offset,
+            this.payloadStart + meta.anim.offset + meta.anim.length,
+          );
+
+          // 建立 Blob URL
+          const animUrl = URL.createObjectURL(
+            new Blob([slice], { type: "image/webp" }),
+          );
+
+          // 更新狀態與畫面
+          this.activeState = { id, imgEl, animUrl };
+          imgEl.src = animUrl;
+
+          // 開始監聽是否離開視窗
+          this.animationObserver.observe(imgEl);
+        }
+
+        stopActiveAnimation() {
+          if (!this.activeState.id) return;
+
+          // 停止監聽
+          this.animationObserver.unobserve(this.activeState.imgEl);
+
+          // 恢復縮圖
+          const thumbUrl = this.thumbUrls.get(this.activeState.id);
+          if (thumbUrl) {
+            this.activeState.imgEl.src = thumbUrl;
+          }
+
+          // 釋放動畫 Blob URL 記憶體
+          URL.revokeObjectURL(this.activeState.animUrl);
+
+          // 重置狀態
+          this.activeState = { id: null, imgEl: null, animUrl: null };
+        }
+
+        getAnimationUrl(id) {
+          const meta = this.indexMap[id];
+          if (!meta) return null;
+
+          const slice = this.buffer.slice(
+            this.payloadStart + meta.anim.offset,
+            this.payloadStart + meta.anim.offset + meta.anim.length,
+          );
+
+          return URL.createObjectURL(new Blob([slice], { type: "image/webp" }));
+        }
+
+        dispose() {
+          console.log("🗑️  正在銷毀 GalleryEngine...");
+
+          this.stopActiveAnimation();
+          this.container.removeEventListener("click", this.handleTap);
+          this.animationObserver.disconnect();
+          this.virtualObserver.disconnect();
+
+          // 釋放所有縮圖 URL
+          for (const url of this.thumbUrls.values()) {
+            URL.revokeObjectURL(url);
+          }
+          this.thumbUrls.clear();
+          this.loadedThumbs.clear();
+          this.renderedItems.clear();
+
+          // 清空資料
+          this.buffer = null;
+          this.indexMap = null;
+          this.allIds = [];
+          this.container.innerHTML = "";
+
+          console.log("✅ 銷毀完成 - 所有資源已釋放");
+        }
+      }
+
+      // ==================== 主應用程式 ====================
+      const galleryContainer = document.getElementById("gallery");
+      const uploadSection = document.getElementById("upload-section");
+      const loadingEl = document.getElementById("loading");
+      const fileInput = document.getElementById("file-input");
+      const modal = document.getElementById("modal");
+      const modalImg = document.getElementById("modal-img");
+      const modalClose = document.getElementById("modal-close");
+      const destroyBtn = document.getElementById("destroy-btn");
+
+      let engine = new GalleryEngine(galleryContainer);
+      let currentModalUrl = null;
+
+      // 檔案選擇事件
+      fileInput.addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        uploadSection.style.display = "none";
+        loadingEl.style.display = "block";
+
+        try {
+          await engine.loadFromFile(file);
+
+          loadingEl.style.display = "none";
+
+          // 使用 console.log 輸出統計資訊
+          const ids = engine.getAllIds();
+          console.log(`✅ 載入完成：共 ${ids.length} 個動畫`);
+          console.log(
+            `📊 檔案大小：${(engine.buffer.byteLength / 1024 / 1024).toFixed(2)} MB`,
+          );
+
+          // 渲染圖庫 (Virtual Scroller)
+          renderGallery(ids);
+
+          // 顯示銷毀按鈕
+          destroyBtn.classList.add("visible");
+
+          // 監聽動畫狀態變化
+          observeActiveState();
         } catch (error) {
-          console.error('❌ 載入失敗:', error);
-          throw error;
-        }
-      }
-
-      initThumbnails() {
-        console.log('🖼️  準備 Virtual Scroller (延遲加載模式)...');
-        this.allIds = Object.keys(this.indexMap);
-        console.log(`✅ 準備完成：共 ${this.allIds.length} 個項目（僅可視範圍會加載）`);
-      }
-
-      loadThumbnail(id, itemElement) {
-        if (this.loadedThumbs.has(id)) return; // 已加載
-        
-        const meta = this.indexMap[id];
-        if (!meta) return;
-
-        const slice = this.buffer.slice(
-          this.payloadStart + meta.thumb.offset, 
-          this.payloadStart + meta.thumb.offset + meta.thumb.length
-        );
-        const thumbUrl = URL.createObjectURL(new Blob([slice], { type: 'image/webp' }));
-        this.thumbUrls.set(id, thumbUrl);
-        this.loadedThumbs.add(id);
-
-        // 更新 DOM
-        const img = itemElement.querySelector('img');
-        if (img) {
-          img.src = thumbUrl;
-          itemElement.classList.remove('placeholder');
-          console.log(`✅ 加載縮圖: ${id}`);
-        }
-      }
-
-      unloadThumbnail(id, itemElement) {
-        if (!this.loadedThumbs.has(id)) return; // 未加載
-        
-        // 如果正在播放動畫，不要卸載
-        if (this.activeState.id === id) return;
-
-        const thumbUrl = this.thumbUrls.get(id);
-        if (thumbUrl) {
-          URL.revokeObjectURL(thumbUrl);
-          this.thumbUrls.delete(id);
-        }
-        this.loadedThumbs.delete(id);
-
-        // 移除圖片但保留佔位符
-        const img = itemElement.querySelector('img');
-        if (img) {
-          img.src = '';
-          itemElement.classList.add('placeholder');
-          console.log(`🗑️  卸載縮圖: ${id}`);
-        }
-      }
-
-      getItemData(id) {
-        if (!this.indexMap || !this.indexMap[id]) {
-          console.warn(`⚠️  項目不存在: ${id}`);
-          return null;
-        }
-        
-        return {
-          url: this.thumbUrls.get(id),
-          width: this.indexMap[id].width,
-          height: this.indexMap[id].height
-        };
-      }
-
-      getAllIds() {
-        return this.indexMap ? Object.keys(this.indexMap) : [];
-      }
-
-      handleTap(e) {
-        const target = e.target;
-        if (target.tagName !== 'IMG' || !target.dataset.id) return;
-        
-        const id = target.dataset.id;
-
-        // 點擊同一個正在播放的 -> 停止
-        if (this.activeState.id === id) {
-          console.log(`⏹️  停止動畫: ${id}`);
-          this.stopActiveAnimation();
-          return;
-        }
-
-        // 點擊新的 -> 先停止舊的，再播新的
-        if (this.activeState.id) {
-          console.log(`⏹️  停止前一個動畫: ${this.activeState.id}`);
-          this.stopActiveAnimation();
-        }
-
-        // JIT 建立動畫 Blob
-        console.log(`▶️  播放動畫: ${id}`);
-        this.playAnimation(id, target);
-      }
-
-      playAnimation(id, imgEl) {
-        const meta = this.indexMap[id];
-        if (!meta) {
-          console.warn(`⚠️  動畫不存在: ${id}`);
-          return;
-        }
-
-        // 從 ArrayBuffer 切割動畫資料 (Zero-copy)
-        const slice = this.buffer.slice(
-          this.payloadStart + meta.anim.offset, 
-          this.payloadStart + meta.anim.offset + meta.anim.length
-        );
-        
-        // 建立 Blob URL
-        const animUrl = URL.createObjectURL(
-          new Blob([slice], { type: 'image/webp' })
-        );
-
-        // 更新狀態與畫面
-        this.activeState = { id, imgEl, animUrl };
-        imgEl.src = animUrl;
-        
-        // 開始監聽是否離開視窗
-        this.animationObserver.observe(imgEl);
-      }
-
-      stopActiveAnimation() {
-        if (!this.activeState.id) return;
-        
-        // 停止監聽
-        this.animationObserver.unobserve(this.activeState.imgEl);
-        
-        // 恢復縮圖
-        const thumbUrl = this.thumbUrls.get(this.activeState.id);
-        if (thumbUrl) {
-          this.activeState.imgEl.src = thumbUrl;
-        }
-        
-        // 釋放動畫 Blob URL 記憶體
-        URL.revokeObjectURL(this.activeState.animUrl);
-        
-        // 重置狀態
-        this.activeState = { id: null, imgEl: null, animUrl: null };
-      }
-
-      getAnimationUrl(id) {
-        const meta = this.indexMap[id];
-        if (!meta) return null;
-
-        const slice = this.buffer.slice(
-          this.payloadStart + meta.anim.offset, 
-          this.payloadStart + meta.anim.offset + meta.anim.length
-        );
-        
-        return URL.createObjectURL(new Blob([slice], { type: 'image/webp' }));
-      }
-
-      dispose() {
-        console.log('🗑️  正在銷毀 GalleryEngine...');
-        
-        this.stopActiveAnimation();
-        this.container.removeEventListener('click', this.handleTap);
-        this.animationObserver.disconnect();
-        this.virtualObserver.disconnect();
-        
-        // 釋放所有縮圖 URL
-        for (const url of this.thumbUrls.values()) {
-          URL.revokeObjectURL(url);
-        }
-        this.thumbUrls.clear();
-        this.loadedThumbs.clear();
-        this.renderedItems.clear();
-        
-        // 清空資料
-        this.buffer = null;
-        this.indexMap = null;
-        this.allIds = [];
-        this.container.innerHTML = '';
-        
-        console.log('✅ 銷毀完成 - 所有資源已釋放');
-      }
-    }
-
-    // ==================== 主應用程式 ====================
-    const galleryContainer = document.getElementById('gallery');
-    const uploadSection = document.getElementById('upload-section');
-    const loadingEl = document.getElementById('loading');
-    const fileInput = document.getElementById('file-input');
-    const modal = document.getElementById('modal');
-    const modalImg = document.getElementById('modal-img');
-    const modalClose = document.getElementById('modal-close');
-    const destroyBtn = document.getElementById('destroy-btn');
-
-    let engine = new GalleryEngine(galleryContainer);
-    let currentModalUrl = null;
-
-    // 檔案選擇事件
-    fileInput.addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      uploadSection.style.display = 'none';
-      loadingEl.style.display = 'block';
-
-      try {
-        await engine.loadFromFile(file);
-        
-        loadingEl.style.display = 'none';
-        
-        // 使用 console.log 輸出統計資訊
-        const ids = engine.getAllIds();
-        console.log(`✅ 載入完成：共 ${ids.length} 個動畫`);
-        console.log(`📊 檔案大小：${(engine.buffer.byteLength / 1024 / 1024).toFixed(2)} MB`);
-        
-        // 渲染圖庫 (Virtual Scroller)
-        renderGallery(ids);
-        
-        // 顯示銷毀按鈕
-        destroyBtn.classList.add('visible');
-        
-        // 監聽動畫狀態變化
-        observeActiveState();
-        
-      } catch (error) {
-        console.error('❌ 載入失敗:', error);
-        loadingEl.innerHTML = `
+          console.error("❌ 載入失敗:", error);
+          loadingEl.innerHTML = `
           <div class="error">
             <p>${error.message}</p>
           </div>
         `;
-      }
-    });
+        }
+      });
 
-    // 渲染圖庫 (Virtual Scroller - 只創建 DOM 骨架，延遲加載圖片)
-    function renderGallery(ids) {
-      const fragment = document.createDocumentFragment();
-      
-      ids.forEach(id => {
-        const item = document.createElement('div');
-        item.className = 'gallery-item placeholder';
-        item.dataset.id = id;
-        
-        const img = document.createElement('img');
-        img.alt = id;
-        img.dataset.id = id;
-        // 不設置 src - 等待 IntersectionObserver 觸發加載
-        
-        // 右下角全屏圖標
-        const fullscreenIcon = document.createElement('div');
-        fullscreenIcon.className = 'fullscreen-icon';
-        fullscreenIcon.innerHTML = `
+      // 渲染圖庫 (Virtual Scroller - 只創建 DOM 骨架，延遲加載圖片)
+      function renderGallery(ids) {
+        const fragment = document.createDocumentFragment();
+
+        ids.forEach((id) => {
+          const item = document.createElement("div");
+          item.className = "gallery-item placeholder";
+          item.dataset.id = id;
+
+          const img = document.createElement("img");
+          img.alt = id;
+          img.dataset.id = id;
+          // 不設置 src - 等待 IntersectionObserver 觸發加載
+
+          // 右下角全屏圖標
+          const fullscreenIcon = document.createElement("div");
+          fullscreenIcon.className = "fullscreen-icon";
+          fullscreenIcon.innerHTML = `
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
             <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
           </svg>
         `;
-        fullscreenIcon.onclick = (e) => {
-          e.stopPropagation();
-          openModal(id);
-        };
-        
-        item.appendChild(img);
-        item.appendChild(fullscreenIcon);
-        fragment.appendChild(item);
-        
-        // 開始監聽這個項目
-        engine.virtualObserver.observe(item);
-        engine.renderedItems.set(id, { element: item, isLoaded: false });
-      });
-      
-      galleryContainer.appendChild(fragment);
-      console.log(`📦 Virtual Scroller: 已創建 ${ids.length} 個 DOM 容器 (圖片按需加載)`);
-    }
+          fullscreenIcon.onclick = (e) => {
+            e.stopPropagation();
+            openModal(id);
+          };
 
-    // 開啟全螢幕模態框
-    function openModal(id) {
-      const data = engine.getItemData(id);
-      if (!data) return;
+          item.appendChild(img);
+          item.appendChild(fullscreenIcon);
+          fragment.appendChild(item);
 
-      // 停止當前播放的動畫
-      engine.stopActiveAnimation();
+          // 開始監聽這個項目
+          engine.virtualObserver.observe(item);
+          engine.renderedItems.set(id, { element: item, isLoaded: false });
+        });
 
-      // 取得動畫 URL
-      currentModalUrl = engine.getAnimationUrl(id);
-      
-      modalImg.src = currentModalUrl;
-      modal.classList.add('active');
-      
-      console.log(`▶️ 播放：${id} (${data.width} × ${data.height})`);
-      
-      // 防止背景滾動
-      document.body.style.overflow = 'hidden';
-    }
-
-    // 關閉模態框
-    function closeModal() {
-      modal.classList.remove('active');
-      document.body.style.overflow = '';
-      
-      // 釋放動畫 URL
-      if (currentModalUrl) {
-        URL.revokeObjectURL(currentModalUrl);
-        currentModalUrl = null;
+        galleryContainer.appendChild(fragment);
+        console.log(
+          `📦 Virtual Scroller: 已創建 ${ids.length} 個 DOM 容器 (圖片按需加載)`,
+        );
       }
-      
-      modalImg.src = '';
-      console.log('⏹️ 停止播放');
-    }
 
-    modalClose.addEventListener('click', closeModal);
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        closeModal();
+      // 開啟全螢幕模態框
+      function openModal(id) {
+        const data = engine.getItemData(id);
+        if (!data) return;
+
+        // 停止當前播放的動畫
+        engine.stopActiveAnimation();
+
+        // 取得動畫 URL
+        currentModalUrl = engine.getAnimationUrl(id);
+
+        modalImg.src = currentModalUrl;
+        modal.classList.add("active");
+
+        console.log(`▶️ 播放：${id} (${data.width} × ${data.height})`);
+
+        // 防止背景滾動
+        document.body.style.overflow = "hidden";
       }
-    });
 
-    // ESC 鍵關閉
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && modal.classList.contains('active')) {
-        closeModal();
-      }
-    });
+      // 關閉模態框
+      function closeModal() {
+        modal.classList.remove("active");
+        document.body.style.overflow = "";
 
-    // 銷毀按鈕事件
-    destroyBtn.addEventListener('click', () => {
-      if (confirm('確定要銷毀所有資源嗎？此操作將清空所有數據並釋放記憶體。')) {
-        closeModal();
-        engine.dispose();
-        engine = new GalleryEngine(galleryContainer);
-        
-        destroyBtn.classList.remove('visible');
-        uploadSection.style.display = 'block';
-        
-        console.log('♻️  強制 GC: 所有資源已釋放，等待瀏覽器垃圾回收...');
-      }
-    });
-
-    // 監聽動畫狀態變化
-    function observeActiveState() {
-      let lastActiveId = null;
-      
-      setInterval(() => {
-        const currentId = engine.activeState.id;
-        if (currentId !== lastActiveId) {
-          if (currentId) {
-            console.log(`🎬 當前播放：${currentId}`);
-          } else {
-            console.log('⏸️ 無播放中的動畫');
-          }
-          lastActiveId = currentId;
+        // 釋放動畫 URL
+        if (currentModalUrl) {
+          URL.revokeObjectURL(currentModalUrl);
+          currentModalUrl = null;
         }
-      }, 100);
-    }
 
-    // 頁面卸載時清理資源
-    window.addEventListener('beforeunload', () => {
-      engine.dispose();
-      if (currentModalUrl) {
-        URL.revokeObjectURL(currentModalUrl);
+        modalImg.src = "";
+        console.log("⏹️ 停止播放");
       }
-    });
 
-    // ==================== PWA 支援 ====================
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js')
-          .then(reg => console.log('✅ Service Worker 註冊成功', reg))
-          .catch(err => console.log('❌ Service Worker 註冊失敗', err));
+      modalClose.addEventListener("click", closeModal);
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) {
+          closeModal();
+        }
       });
-    }
-  </script>
-</body>
+
+      // ESC 鍵關閉
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && modal.classList.contains("active")) {
+          closeModal();
+        }
+      });
+
+      // 銷毀按鈕事件
+      destroyBtn.addEventListener("click", () => {
+        if (
+          confirm("確定要銷毀所有資源嗎？此操作將清空所有數據並釋放記憶體。")
+        ) {
+          closeModal();
+          engine.dispose();
+          engine = new GalleryEngine(galleryContainer);
+
+          // 重置 UI 狀態
+          destroyBtn.classList.remove("visible");
+          uploadSection.style.display = "block";
+          loadingEl.style.display = "none";
+          fileInput.value = ""; // 清空文件選擇，允許重新選擇同一檔案
+
+          console.log("♻️  強制 GC: 所有資源已釋放，等待瀏覽器垃圾回收...");
+        }
+      });
+
+      // 監聽動畫狀態變化
+      function observeActiveState() {
+        let lastActiveId = null;
+
+        setInterval(() => {
+          const currentId = engine.activeState.id;
+          if (currentId !== lastActiveId) {
+            if (currentId) {
+              console.log(`🎬 當前播放：${currentId}`);
+            } else {
+              console.log("⏸️ 無播放中的動畫");
+            }
+            lastActiveId = currentId;
+          }
+        }, 100);
+      }
+
+      // 頁面卸載時清理資源
+      window.addEventListener("beforeunload", () => {
+        engine.dispose();
+        if (currentModalUrl) {
+          URL.revokeObjectURL(currentModalUrl);
+        }
+      });
+
+      // ==================== PWA 支援 ====================
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("sw.js")
+            .then((reg) => console.log("✅ Service Worker 註冊成功", reg))
+            .catch((err) => console.log("❌ Service Worker 註冊失敗", err));
+        });
+      }
+    </script>
+  </body>
 </html>
