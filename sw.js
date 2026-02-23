@@ -1,5 +1,5 @@
 // Service Worker for WebP Gallery PWA
-const CACHE_NAME = 'aiG-v1';
+const CACHE_NAME = 'aiG-v2'; // 更新版本號強制清除舊快取
 const BASE_PATH = '/aiG';
 const urlsToCache = [
   `${BASE_PATH}/`,
