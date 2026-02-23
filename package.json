@@ -1,0 +1,24 @@
+{
+  "name": "webp-gallery-engine",
+  "version": "1.0.0",
+  "description": "行動端極致效能 WebP 動畫圖庫 (Vanilla JS 零依賴方案)",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-bin.js",
+    "dev": "npx http-server -p 8080 -o"
+  },
+  "keywords": [
+    "webp",
+    "animation",
+    "gallery",
+    "vanilla-js",
+    "mobile-optimized",
+    "ios"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "sharp": "^0.33.0",
+    "http-server": "^14.1.1"
+  }
+}

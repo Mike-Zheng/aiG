@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>WebP 動畫圖庫 - 極致效能展示</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+      line-height: 1.6;
+    }
+
+    header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px 20px;
+      border-radius: 12px;
+      margin-bottom: 30px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    .stats {
+      display: flex;
+      gap: 20px;
+      margin-top: 15px;
+      flex-wrap: wrap;
+    }
+
+    .stat {
+      background: rgba(255,255,255,0.2);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+
+    .instructions {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .instructions h2 {
+      font-size: 18px;
+      margin-bottom: 12px;
+      color: #333;
+    }
+
+    .instructions ul {
+      padding-left: 20px;
+      color: #666;
+    }
+
+    .instructions li {
+      margin-bottom: 8px;
+    }
+
+    .instructions code {
+      background: #f0f0f0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 60px 20px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .loading-spinner {
+      width: 50px;
+      height: 50px;
+      margin: 0 auto 20px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    #gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .gallery-item {
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      transition: transform 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .gallery-item:active {
+      transform: scale(0.98);
+    }
+
+    .gallery-item:hover {
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    }
+
+    .gallery-item img {
+      width: 100%;
+      height: auto;
+      display: block;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .gallery-item .label {
+      padding: 10px;
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+      background: #fafafa;
+    }
+
+    .error {
+      background: #fee;
+      border: 2px solid #fcc;
+      color: #c33;
+      padding: 20px;
+      border-radius: 12px;
+      margin-top: 20px;
+    }
+
+    .error h3 {
+      margin-bottom: 10px;
+    }
+
+    @media (max-width: 600px) {
+      #gallery {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 12px;
+      }
+
+      h1 {
+        font-size: 22px;
+      }
+
+      .stats {
+        font-size: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🎬 WebP 動畫圖庫</h1>
+    <p class="subtitle">行動端極致效能 - 零依賴 Vanilla JS 方案</p>
+    <div class="stats">
+      <div class="stat" id="stat-count">載入中...</div>
+      <div class="stat" id="stat-size">載入中...</div>
+      <div class="stat" id="stat-active">當前播放: 無</div>
+    </div>
+  </header>
+
+  <div class="instructions">
+    <h2>💡 使用說明</h2>
+    <ul>
+      <li>📱 <strong>點擊圖片</strong>即可播放 WebP 動畫</li>
+      <li>🔄 <strong>再次點擊</strong>可停止播放並恢復縮圖</li>
+      <li>⚡ 系統<strong>同時只允許一個動畫播放</strong>，確保最佳效能</li>
+      <li>🔍 動畫<strong>離開視窗</strong>時會自動停止並釋放記憶體</li>
+      <li>📊 建置前請先將 WebP 檔案放入 <code>assets/</code> 目錄，執行 <code>npm run build</code></li>
+    </ul>
+  </div>
+
+  <div class="loading" id="loading">
+    <div class="loading-spinner"></div>
+    <p>正在載入資料庫...</p>
+  </div>
+
+  <div id="gallery"></div>
+
+  <script type="module">
+    import { GalleryEngine } from './src/GalleryEngine.js';
+
+    const galleryContainer = document.getElementById('gallery');
+    const loadingEl = document.getElementById('loading');
+    const statCount = document.getElementById('stat-count');
+    const statSize = document.getElementById('stat-size');
+    const statActive = document.getElementById('stat-active');
+
+    // 初始化引擎
+    const engine = new GalleryEngine(galleryContainer);
+
+    // 載入 .bin 檔案
+    async function init() {
+      try {
+        const indexMap = await engine.load('./dist/data.bin');
+        
+        // 隱藏載入畫面
+        loadingEl.style.display = 'none';
+        
+        // 更新統計資訊
+        const ids = engine.getAllIds();
+        statCount.textContent = `共 ${ids.length} 個動畫`;
+        statSize.textContent = `大小: ${(engine.buffer.byteLength / 1024 / 1024).toFixed(2)} MB`;
+        
+        // 渲染圖庫
+        renderGallery(ids);
+        
+        // 監聽動畫狀態變化
+        observeActiveState();
+        
+      } catch (error) {
+        loadingEl.innerHTML = `
+          <div class="error">
+            <h3>❌ 載入失敗</h3>
+            <p>${error.message}</p>
+            <p style="margin-top: 10px;">請確認：</p>
+            <ol style="text-align: left; padding-left: 20px; margin-top: 8px;">
+              <li>assets/ 目錄中已放置 WebP 檔案</li>
+              <li>已執行 <code>npm install</code></li>
+              <li>已執行 <code>npm run build</code> 產生 dist/data.bin</li>
+              <li>使用 <code>npm run dev</code> 啟動本地伺服器</li>
+            </ol>
+          </div>
+        `;
+      }
+    }
+
+    // 渲染圖庫
+    function renderGallery(ids) {
+      const fragment = document.createDocumentFragment();
+      
+      ids.forEach(id => {
+        const data = engine.getItemData(id);
+        if (!data) return;
+        
+        const item = document.createElement('div');
+        item.className = 'gallery-item';
+        
+        const img = document.createElement('img');
+        img.src = data.url;
+        img.alt = id;
+        img.dataset.id = id;
+        img.loading = 'lazy';
+        
+        const label = document.createElement('div');
+        label.className = 'label';
+        label.textContent = `${id}\n${data.width}×${data.height}`;
+        
+        item.appendChild(img);
+        item.appendChild(label);
+        fragment.appendChild(item);
+      });
+      
+      galleryContainer.appendChild(fragment);
+    }
+
+    // 監聽動畫狀態變化
+    function observeActiveState() {
+      let lastActiveId = null;
+      
+      setInterval(() => {
+        const currentId = engine.activeState.id;
+        if (currentId !== lastActiveId) {
+          statActive.textContent = currentId 
+            ? `當前播放: ${currentId}` 
+            : '當前播放: 無';
+          lastActiveId = currentId;
+        }
+      }, 100);
+    }
+
+    // 啟動
+    init();
+
+    // 頁面卸載時清理資源
+    window.addEventListener('beforeunload', () => {
+      engine.dispose();
+    });
+  </script>
+</body>
+</html>
