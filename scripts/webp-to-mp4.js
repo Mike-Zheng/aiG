@@ -33,8 +33,8 @@ function testEncoder(encoderId, params) {
       fs.mkdirSync(testDir, { recursive: true });
     }
     
-    // 生成一個簡單的測試影格（1x1 黑色像素）
-    execSync(`ffmpeg -f lavfi -i color=black:s=64x64:d=0.1 -frames:v 1 "${testFrame}" -y`, 
+    // 生成一個簡單的測試影格（256x256 符合 NVENC 最小尺寸）
+    execSync(`ffmpeg -f lavfi -i color=black:s=256x256:d=0.1 -frames:v 1 "${testFrame}" -y`, 
       { stdio: 'ignore', timeout: 5000 });
     
     // 測試編碼器
@@ -63,12 +63,14 @@ function detectGPUEncoder() {
   console.log('🔍 檢測可用的 GPU 硬體加速...\n');
   
   // iOS 優化：優先使用 HEVC (H.265) 編碼器
+  // 修復 FFmpeg 7.1.x Bug：移除 -profile:v 避免參數解析錯誤
   const encoders = [
     {
       name: 'NVIDIA NVENC (H.265/HEVC)',
       id: 'hevc_nvenc',
-      params: '-preset p7 -tune hq -rc vbr -cq 24 -b:v 0 -tag:v hvc1',
-      description: '🚀 NVIDIA GPU (HEVC iOS 最佳化)'
+      // 修復：移除 -profile:v main (FFmpeg 7.1.x Bug)
+      params: '-preset p7 -tune hq -rc vbr -cq 28 -b:v 0 -spatial-aq 1 -temporal-aq 1 -rc-lookahead 32 -color_primaries bt709 -color_trc bt709 -colorspace bt709 -tag:v hvc1',
+      description: '🚀 NVIDIA GPU (HEVC 極致壓縮 + iOS 顯色優化)'
     },
     {
       name: 'AMD AMF (H.265/HEVC)',
@@ -85,8 +87,9 @@ function detectGPUEncoder() {
     {
       name: 'NVIDIA NVENC (H.264)',
       id: 'h264_nvenc',
-      params: '-preset p7 -tune hq -rc vbr -cq 18 -b:v 0',
-      description: '🚀 NVIDIA GPU 硬體加速 (H.264 回退)'
+      // 修復：移除 -profile:v high (FFmpeg 7.1.x Bug)
+      params: '-preset p7 -tune hq -rc vbr -cq 23 -b:v 0 -spatial-aq 1 -temporal-aq 1 -rc-lookahead 32',
+      description: '🚀 NVIDIA GPU 硬體加速 (H.264 高效回退)'
     },
     {
       name: 'AMD AMF (H.264)',
