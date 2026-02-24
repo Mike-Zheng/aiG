@@ -1,0 +1,243 @@
+# aiG Gallery - 專案編碼規範
+
+## 🎯 核心原則
+
+**記憶體管理至上** - 任何創建資源的操作都必須有對應的清理策略
+
+## 📋 強制規範
+
+### 1. Blob URL 管理
+```javascript
+// ✅ 正確：創建後必須 revoke
+const url = URL.createObjectURL(blob);
+// 使用 url...
+URL.revokeObjectURL(url);
+
+// ❌ 錯誤：忘記 revoke 會導致記憶體洩漏
+const url = URL.createObjectURL(blob);
+// 使用後未 revoke
+```
+
+**規則**：每個 `createObjectURL()` 都必須配對 `revokeObjectURL()`
+
+### 2. 視頻元素清理三步驟
+```javascript
+// ✅ 完整清理
+video.pause();
+video.removeAttribute('src');
+video.load(); // 必須！觸發實際資源釋放
+
+// ❌ 不完整：僅 pause 或設 src='' 不夠
+video.pause();
+video.src = '';
+```
+
+**規則**：停止視頻必須執行 `pause() + removeAttribute('src') + load()`
+
+### 3. 事件監聽器配對
+```javascript
+// ✅ 添加時保存引用，銷毀時移除
+this.handleClick = this.handleClick.bind(this);
+element.addEventListener('click', this.handleClick);
+// 在 dispose() 中：
+element.removeEventListener('click', this.handleClick);
+
+// ❌ 使用匿名函數無法移除
+element.addEventListener('click', () => { });
+```
+
+**規則**：所有 `addEventListener` 必須在 `dispose()` 中有對應的 `removeEventListener`
+
+### 4. Observer 清理
+```javascript
+// ✅ 創建時保存，銷毀時 disconnect
+this.observer = new IntersectionObserver(...);
+// 在 dispose() 中：
+this.observer.disconnect();
+
+// ❌ 忘記 disconnect
+this.observer = new IntersectionObserver(...);
+// 從未 disconnect
+```
+
+**規則**：所有 Observer 必須在 `dispose()` 中 `disconnect()`
+
+### 5. 計時器清理
+```javascript
+// ✅ 創建時保存，銷毀時清除
+this.timer = setTimeout(...);
+// 在 dispose() 或切換時：
+clearTimeout(this.timer);
+this.timer = null;
+
+// ❌ 未清除計時器
+this.timer = setTimeout(...);
+// 從未 clearTimeout
+```
+
+**規則**：所有 `setTimeout/setInterval` 必須有對應的 `clear` 調用
+
+### 6. 單擊雙擊衝突處理
+```javascript
+// ✅ 桌面：延遲單擊 250ms
+handleTap() {
+  this.clickTimer = setTimeout(() => {
+    // 單擊操作
+  }, 250);
+}
+
+handleDoubleTap() {
+  if (this.clickTimer) {
+    clearTimeout(this.clickTimer);
+    this.clickTimer = null;
+  }
+  // 雙擊操作
+}
+
+// ✅ 移動：使用 touchend + 300ms 判斷
+handleTouchEnd(e) {
+  const now = Date.now();
+  if (now - this.lastTapTime < 300) {
+    this.justDoubleTapped = true;
+    // 雙擊操作
+  }
+  this.lastTapTime = now;
+}
+```
+
+**規則**：
+- 桌面單擊延遲 250ms 避免雙擊衝突
+- 移動使用 `touchend` 事件，300ms 內判定為雙擊
+- 雙擊後設置標誌防止觸發 click 事件
+
+### 7. CSS 移動優化
+```css
+/* ✅ 禁用雙擊縮放以支持自定義雙擊 */
+.interactive-element {
+  touch-action: manipulation;
+}
+
+/* ❌ 使用預設值會與雙擊全屏衝突 */
+.interactive-element {
+  /* 沒有設置 touch-action */
+}
+```
+
+**規則**：需要雙擊交互的元素必須設置 `touch-action: manipulation`
+
+## 🔧 dispose() 方法檢查清單
+
+每個引擎/組件的 `dispose()` 必須包含：
+
+```javascript
+dispose() {
+  // 1. 清理計時器
+  if (this.clickTimer) clearTimeout(this.clickTimer);
+  
+  // 2. 停止當前播放
+  this.stopActiveAnimation();
+  
+  // 3. 移除所有事件監聽器
+  this.container.removeEventListener('click', this.handleTap);
+  this.container.removeEventListener('dblclick', this.handleDoubleTap);
+  this.container.removeEventListener('touchend', this.handleTouchEnd);
+  
+  // 4. Disconnect 所有 observers
+  this.animationObserver?.disconnect();
+  this.virtualObserver?.disconnect();
+  
+  // 5. Revoke 所有 Blob URLs
+  for (const url of this.thumbUrls.values()) {
+    URL.revokeObjectURL(url);
+  }
+  
+  // 6. 清理所有視頻元素
+  this.renderedItems.forEach(({ element }) => {
+    const video = element.querySelector('video');
+    if (video) {
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+    }
+  });
+  
+  // 7. 清空所有集合
+  this.thumbUrls.clear();
+  this.renderedItems.clear();
+  
+  // 8. 解除引用
+  this.buffer = null;
+  this.indexMap = null;
+  this.allIds = [];
+  
+  // 9. 清空 DOM
+  this.container.innerHTML = '';
+}
+```
+
+## 🚫 禁止事項
+
+1. ❌ 在迴圈中創建 Blob URL 而沒有立即清理計畫
+2. ❌ 直接設置 `video.src = blob` 而非使用 Blob URL
+3. ❌ 使用匿名函數作為事件監聽器
+4. ❌ 在全局作用域創建 Observer 而未管理
+5. ❌ 複製大型 ArrayBuffer 而非使用 slice
+6. ❌ 預載所有動畫（應使用 JIT 加載）
+7. ❌ 在移動設備上僅使用 click/dblclick 事件
+
+## 📊 性能優化策略
+
+### Virtual Scrolling
+- 只渲染可見區域 + 緩衝區（200px）
+- 離開視窗立即卸載資源
+
+### JIT Loading
+- 點擊時才創建動畫 Blob
+- 切換時立即釋放舊動畫
+- 同時最多一個動畫播放
+
+### Auto-Stop
+- 使用 IntersectionObserver 監聽可見性
+- 離開視窗自動停止動畫
+
+### Zero-Copy
+```javascript
+// ✅ 使用 slice 共享記憶體
+const slice = buffer.slice(offset, offset + length);
+
+// ❌ 不要複製整個 buffer
+const copy = new Uint8Array(buffer).slice(offset, offset + length);
+```
+
+## 🔍 Code Review 重點
+
+審查代碼時必須檢查：
+
+1. 每個 `createObjectURL` 是否有對應的 `revokeObjectURL`
+2. 每個 `addEventListener` 是否在 dispose 中移除
+3. 每個 `new IntersectionObserver` 是否有 disconnect
+4. 每個 `setTimeout` 是否有 clearTimeout
+5. 視頻停止是否執行完整三步驟
+6. dispose 方法是否完整
+7. 移動設備交互是否使用 touch 事件
+8. 是否設置了正確的 touch-action CSS
+
+## 📱 移動設備特殊處理
+
+```javascript
+// ✅ 同時支持桌面和移動
+element.addEventListener('click', this.handleTap);      // 桌面單擊
+element.addEventListener('dblclick', this.handleDoubleTap); // 桌面雙擊
+element.addEventListener('touchend', this.handleTouchEnd);  // 移動雙擊
+
+// CSS
+.element {
+  touch-action: manipulation; /* 禁用雙擊縮放 */
+}
+```
+
+## 🎓 參考資源
+
+- [MDN: URL.createObjectURL](https://developer.mozilla.org/en-US/docs/Web/API/URL/createObjectURL)
+- [MDN: HTMLMediaElement.load](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/load)
+- [Chrome DevTools: Memory Profiler](https://developer.chrome.com/docs/devtools/memory-problems/)
