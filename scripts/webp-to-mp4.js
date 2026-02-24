@@ -1,5 +1,5 @@
 // scripts/webp-to-mp4.js
-// 高品質 WebP 動畫轉 MP4 腳本
+// 高品質 WebP 動畫轉 MP4 腳本 (NVIDIA GPU 加速版)
 // 使用 Sharp 庫拆解影格，確保畫質不受損失
 import fs from 'fs';
 import path from 'path';
@@ -13,7 +13,7 @@ const __dirname = path.dirname(__filename);
 // 配置路徑
 const SOURCES_DIR = path.join(__dirname, '..', 'sources');
 const TEMP_DIR = path.join(SOURCES_DIR, 'temp');
-const ASSETS_DIR = path.join(__dirname, '..', 'assets');
+const ASSETS_DIR = path.join(__dirname, '..', 'mp4');
 
 // 檢查必要工具
 function checkTools() {
@@ -115,6 +115,7 @@ async function extractFrames(webpPath, outputDir) {
     for (let i = 0; i < frameCount; i++) {
       const outputPath = path.join(frameDir, `frame_${String(i + 1).padStart(4, '0')}.png`);
       
+      // 使用迴圈拆解圖片時，這會大量依賴 CPU 效能
       await sharp(webpPath, { page: i })
         .png({ compressionLevel: 0, force: true }) // 無壓縮 PNG 保持最高畫質
         .toFile(outputPath);
@@ -134,20 +135,23 @@ async function extractFrames(webpPath, outputDir) {
   }
 }
 
-// 將 PNG 序列轉換為 MP4
+// 將 PNG 序列轉換為 MP4 (🚀 替換為 GPU 加速版)
 function convertToMP4(frameDir, outputPath, fps) {
-  console.log(`   轉換為 MP4 (${fps} fps)...`);
+  console.log(`   轉換為 MP4 (${fps} fps) [🚀 啟用 NVENC 硬體加速]...`);
 
   try {
     const inputPattern = path.join(frameDir, 'frame_%04d.png');
     
-    // 使用 FFmpeg 高品質轉換
-    // -c:v libx264: 使用 H.264 編碼
-    // -preset slow: 較慢但品質更好
-    // -crf 18: 高品質（0-51，越小品質越好，18 接近無損）
+    // 使用 FFmpeg 與 NVIDIA NVENC 高品質轉換
+    // -c:v h264_nvenc: 使用 NVIDIA H.264 硬體編碼
+    // -preset p6: NVENC 高品質預設 (速度與品質的最佳平衡)
+    // -tune hq: 針對高畫質進行微調
+    // -cq 18: 恆定畫質參數 (取代 CPU 的 -crf，18 接近無損)
     // -pix_fmt yuv420p: 確保相容性
-    // -r: 設定幀率
-    const ffmpegCmd = `ffmpeg -framerate ${fps} -i "${inputPattern}" -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -movflags +faststart "${outputPath}" -y`;
+    //
+    // 💡 備註：如果你想要像之前一樣壓成體積更小的 H.265 (HEVC) 格式，
+    // 請將 h264_nvenc 改成 hevc_nvenc，並加上 -tag:v hvc1
+    const ffmpegCmd = `ffmpeg -framerate ${fps} -i "${inputPattern}" -c:v h264_nvenc -preset p6 -tune hq -cq 18 -pix_fmt yuv420p -movflags +faststart "${outputPath}" -y`;
     
     execSync(ffmpegCmd, { stdio: 'ignore' });
 
