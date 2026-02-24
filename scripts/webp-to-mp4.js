@@ -1,11 +1,13 @@
 // scripts/webp-to-mp4.js
-// 高品質 WebP 動畫轉 MP4 腳本 (NVIDIA GPU 加速版)
+// 高品質 WebP 動畫轉 MP4 腳本 (智能 GPU 加速版)
 // 使用 Sharp 庫拆解影格，確保畫質不受損失
+// 支援 NVIDIA, AMD, Intel GPU 硬體加速，自動回退到 CPU 編碼
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import sharp from 'sharp';
+import os from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,6 +16,113 @@ const __dirname = path.dirname(__filename);
 const SOURCES_DIR = path.join(__dirname, '..', 'sources');
 const TEMP_DIR = path.join(SOURCES_DIR, 'temp');
 const ASSETS_DIR = path.join(__dirname, '..', 'mp4');
+
+// GPU 編碼器配置（全域變數）
+let GPU_ENCODER = null;
+
+// 測試編碼器是否真正可用（運行時測試）
+function testEncoder(encoderId, params) {
+  try {
+    // 創建一個 1x1 的測試圖片
+    const testDir = path.join(os.tmpdir(), 'ffmpeg-test-' + Date.now());
+    const testFrame = path.join(testDir, 'test.png');
+    const testOutput = path.join(testDir, 'test.mp4');
+    
+    // 創建測試目錄
+    if (!fs.existsSync(testDir)) {
+      fs.mkdirSync(testDir, { recursive: true });
+    }
+    
+    // 生成一個簡單的測試影格（1x1 黑色像素）
+    execSync(`ffmpeg -f lavfi -i color=black:s=64x64:d=0.1 -frames:v 1 "${testFrame}" -y`, 
+      { stdio: 'ignore', timeout: 5000 });
+    
+    // 測試編碼器
+    const testCmd = `ffmpeg -framerate 25 -i "${testFrame}" -frames:v 1 -c:v ${encoderId} ${params} -pix_fmt yuv420p "${testOutput}" -y`;
+    execSync(testCmd, { stdio: 'ignore', timeout: 10000 });
+    
+    // 清理測試檔案
+    fs.rmSync(testDir, { recursive: true, force: true });
+    
+    return true;
+  } catch (error) {
+    // 清理失敗的測試檔案
+    try {
+      const testDir = path.join(os.tmpdir(), 'ffmpeg-test-' + Date.now());
+      if (fs.existsSync(testDir)) {
+        fs.rmSync(testDir, { recursive: true, force: true });
+      }
+    } catch {}
+    
+    return false;
+  }
+}
+
+// 檢測可用的 GPU 編碼器
+function detectGPUEncoder() {
+  console.log('🔍 檢測可用的 GPU 硬體加速...\n');
+  
+  const encoders = [
+    {
+      name: 'NVIDIA NVENC (H.264)',
+      id: 'h264_nvenc',
+      params: '-preset p7 -tune hq -rc vbr -cq 18 -b:v 0',
+      description: '🚀 NVIDIA GPU 硬體加速'
+    },
+    {
+      name: 'AMD AMF (H.264)',
+      id: 'h264_amf',
+      params: '-quality quality -rc cqp -qp_i 18 -qp_p 18',
+      description: '🚀 AMD GPU 硬體加速'
+    },
+    {
+      name: 'Intel Quick Sync (H.264)',
+      id: 'h264_qsv',
+      params: '-preset veryslow -global_quality 18',
+      description: '🚀 Intel GPU 硬體加速'
+    },
+    {
+      name: 'NVIDIA NVENC (H.265/HEVC)',
+      id: 'hevc_nvenc',
+      params: '-preset p7 -tune hq -rc vbr -cq 24 -b:v 0 -tag:v hvc1',
+      description: '🚀 NVIDIA GPU (HEVC 更高壓縮率)'
+    }
+  ];
+  
+  for (const encoder of encoders) {
+    // 先檢查編碼器是否存在
+    try {
+      const checkCmd = process.platform === 'win32' 
+        ? `ffmpeg -hide_banner -encoders 2>&1 | findstr /C:"${encoder.id}"`
+        : `ffmpeg -hide_banner -encoders 2>&1 | grep "${encoder.id}"`;
+      
+      execSync(checkCmd, { stdio: 'pipe' });
+    } catch {
+      continue; // 編碼器不存在，跳過
+    }
+    
+    // 運行時測試編碼器
+    console.log(`   測試 ${encoder.name}...`);
+    if (testEncoder(encoder.id, encoder.params)) {
+      console.log(`   ✓ ${encoder.name} 可用\n`);
+      console.log(`   ${encoder.description}\n`);
+      return encoder;
+    } else {
+      console.log(`   ✗ ${encoder.name} 無法使用（可能是驅動或硬體問題）`);
+    }
+  }
+  
+  // 沒有找到可用的 GPU 編碼器，使用 CPU 編碼
+  console.log('   ⚠️  未偵測到可用的 GPU 硬體加速');
+  console.log('   將使用 CPU 軟體編碼 (libx264)\n');
+  
+  return {
+    name: 'CPU 軟體編碼 (H.264)',
+    id: 'libx264',
+    params: '-preset medium -crf 18',
+    description: '💻 CPU 軟體編碼 (較慢但相容性最佳)'
+  };
+}
 
 // 檢查必要工具
 function checkTools() {
@@ -39,7 +148,10 @@ function checkTools() {
     process.exit(1);
   }
 
-  console.log('');
+  console.log('\n');
+  
+  // 檢測並設置 GPU 編碼器
+  GPU_ENCODER = detectGPUEncoder();
 }
 
 // 確保目錄存在
@@ -111,23 +223,39 @@ async function extractFrames(webpPath, outputDir) {
     const frameCount = metadata.pages;
     console.log(`   總共 ${frameCount} 幀`);
     
-    // 逐幀提取並儲存為 PNG
-    for (let i = 0; i < frameCount; i++) {
-      const outputPath = path.join(frameDir, `frame_${String(i + 1).padStart(4, '0')}.png`);
+    // 優化：使用批量並行處理提取影格
+    const batchSize = 10; // 每批處理 10 個影格
+    const startTime = Date.now();
+    
+    for (let i = 0; i < frameCount; i += batchSize) {
+      const batch = [];
+      const end = Math.min(i + batchSize, frameCount);
       
-      // 使用迴圈拆解圖片時，這會大量依賴 CPU 效能
-      await sharp(webpPath, { page: i })
-        .png({ compressionLevel: 0, force: true }) // 無壓縮 PNG 保持最高畫質
-        .toFile(outputPath);
-      
-      // 顯示進度（每 20 幀顯示一次）
-      if ((i + 1) % 20 === 0 || i === frameCount - 1) {
-        process.stdout.write(`\r   進度: ${i + 1}/${frameCount} 幀`);
+      for (let j = i; j < end; j++) {
+        const outputPath = path.join(frameDir, `frame_${String(j + 1).padStart(4, '0')}.png`);
+        
+        // 批次處理，減少 I/O 開銷
+        const promise = sharp(webpPath, { page: j })
+          .png({ 
+            compressionLevel: 0,  // 無壓縮以保持速度
+            force: true 
+          })
+          .toFile(outputPath);
+        
+        batch.push(promise);
       }
+      
+      // 等待當前批次完成
+      await Promise.all(batch);
+      
+      // 顯示進度
+      const percent = ((end / frameCount) * 100).toFixed(1);
+      process.stdout.write(`\r   進度: ${end}/${frameCount} 幀 (${percent}%)`);
     }
     
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
     process.stdout.write('\n');
-    console.log(`   ✓ 已提取 ${frameCount} 幀 PNG 圖片`);
+    console.log(`   ✓ 已提取 ${frameCount} 幀 PNG 圖片 (${duration}秒)`);
     return { frameDir, frameCount };
   } catch (error) {
     console.error(`   ✗ 拆解失敗: ${error.message}`);
@@ -135,29 +263,24 @@ async function extractFrames(webpPath, outputDir) {
   }
 }
 
-// 將 PNG 序列轉換為 MP4 (🚀 替換為 GPU 加速版)
+// 將 PNG 序列轉換為 MP4 (智能 GPU 加速版)
 function convertToMP4(frameDir, outputPath, fps) {
-  console.log(`   轉換為 MP4 (${fps} fps) [🚀 啟用 NVENC 硬體加速]...`);
+  const encoderName = GPU_ENCODER.name;
+  console.log(`   轉換為 MP4 (${fps} fps) [使用 ${encoderName}]...`);
 
   try {
     const inputPattern = path.join(frameDir, 'frame_%04d.png');
     
-    // 使用 FFmpeg 與 NVIDIA NVENC 高品質轉換
-    // -c:v h264_nvenc: 使用 NVIDIA H.264 硬體編碼
-    // -preset p6: NVENC 高品質預設 (速度與品質的最佳平衡)
-    // -tune hq: 針對高畫質進行微調
-    // -cq 18: 恆定畫質參數 (取代 CPU 的 -crf，18 接近無損)
-    // -pix_fmt yuv420p: 確保相容性
-    //
-    // 💡 備註：如果你想要像之前一樣壓成體積更小的 H.265 (HEVC) 格式，
-    // 請將 h264_nvenc 改成 hevc_nvenc，並加上 -tag:v hvc1
-    const ffmpegCmd = `ffmpeg -framerate ${fps} -i "${inputPattern}" -c:v h264_nvenc -preset p6 -tune hq -cq 18 -pix_fmt yuv420p -movflags +faststart "${outputPath}" -y`;
+    // 使用檢測到的最佳編碼器
+    const ffmpegCmd = `ffmpeg -framerate ${fps} -i "${inputPattern}" -c:v ${GPU_ENCODER.id} ${GPU_ENCODER.params} -pix_fmt yuv420p -movflags +faststart "${outputPath}" -y`;
     
+    const startTime = Date.now();
     execSync(ffmpegCmd, { stdio: 'ignore' });
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
 
     const stats = fs.statSync(outputPath);
     const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
-    console.log(`   ✓ 已轉換為 MP4: ${sizeMB} MB`);
+    console.log(`   ✓ 已轉換為 MP4: ${sizeMB} MB (${duration}秒)`);
     
     return true;
   } catch (error) {
@@ -208,7 +331,8 @@ async function processWebP(webpPath) {
 
 // 主函數
 async function main() {
-  console.log('🎬 WebP 動畫 → MP4 高品質轉換工具\n');
+  console.log('🎬 WebP 動畫 → MP4 高品質轉換工具 (智能 GPU 加速版)\n');
+  console.log('支援 NVIDIA、AMD、Intel GPU 硬體加速');
   console.log('使用 Sharp 庫提取影格，確保畫質不受損失\n');
 
   // 檢查工具
@@ -262,6 +386,7 @@ async function main() {
   }
 
   console.log(`\n📁 MP4 影片輸出於：${ASSETS_DIR}`);
+  console.log(`🚀 使用編碼器：${GPU_ENCODER.name}`);
   console.log('💡 臨時 PNG 影格已自動清理');
   console.log('\n✨ 完成！\n');
 }
