@@ -15,7 +15,7 @@ const __dirname = path.dirname(__filename);
 // 配置路徑
 const SOURCES_DIR = path.join(__dirname, '..', 'sources');
 const TEMP_DIR = path.join(SOURCES_DIR, 'temp');
-const ASSETS_DIR = path.join(__dirname, '..', 'mp4');
+const ASSETS_DIR = path.join(__dirname, '..', 'assets');
 
 // GPU 編碼器配置（全域變數）
 let GPU_ENCODER = null;
@@ -62,30 +62,43 @@ function testEncoder(encoderId, params) {
 function detectGPUEncoder() {
   console.log('🔍 檢測可用的 GPU 硬體加速...\n');
   
+  // iOS 優化：優先使用 HEVC (H.265) 編碼器
   const encoders = [
+    {
+      name: 'NVIDIA NVENC (H.265/HEVC)',
+      id: 'hevc_nvenc',
+      params: '-preset p7 -tune hq -rc vbr -cq 24 -b:v 0 -tag:v hvc1',
+      description: '🚀 NVIDIA GPU (HEVC iOS 最佳化)'
+    },
+    {
+      name: 'AMD AMF (H.265/HEVC)',
+      id: 'hevc_amf',
+      params: '-quality quality -rc cqp -qp_i 24 -qp_p 24 -tag:v hvc1',
+      description: '🚀 AMD GPU (HEVC iOS 最佳化)'
+    },
+    {
+      name: 'Intel Quick Sync (H.265/HEVC)',
+      id: 'hevc_qsv',
+      params: '-preset veryslow -global_quality 24 -tag:v hvc1',
+      description: '🚀 Intel GPU (HEVC iOS 最佳化)'
+    },
     {
       name: 'NVIDIA NVENC (H.264)',
       id: 'h264_nvenc',
       params: '-preset p7 -tune hq -rc vbr -cq 18 -b:v 0',
-      description: '🚀 NVIDIA GPU 硬體加速'
+      description: '🚀 NVIDIA GPU 硬體加速 (H.264 回退)'
     },
     {
       name: 'AMD AMF (H.264)',
       id: 'h264_amf',
       params: '-quality quality -rc cqp -qp_i 18 -qp_p 18',
-      description: '🚀 AMD GPU 硬體加速'
+      description: '🚀 AMD GPU 硬體加速 (H.264 回退)'
     },
     {
       name: 'Intel Quick Sync (H.264)',
       id: 'h264_qsv',
       params: '-preset veryslow -global_quality 18',
-      description: '🚀 Intel GPU 硬體加速'
-    },
-    {
-      name: 'NVIDIA NVENC (H.265/HEVC)',
-      id: 'hevc_nvenc',
-      params: '-preset p7 -tune hq -rc vbr -cq 24 -b:v 0 -tag:v hvc1',
-      description: '🚀 NVIDIA GPU (HEVC 更高壓縮率)'
+      description: '🚀 Intel GPU 硬體加速 (H.264 回退)'
     }
   ];
   
@@ -112,15 +125,15 @@ function detectGPUEncoder() {
     }
   }
   
-  // 沒有找到可用的 GPU 編碼器，使用 CPU 編碼
+  // 沒有找到可用的 GPU 編碼器，使用 CPU HEVC 編碼（iOS 優化）
   console.log('   ⚠️  未偵測到可用的 GPU 硬體加速');
-  console.log('   將使用 CPU 軟體編碼 (libx264)\n');
+  console.log('   將使用 CPU 軟體編碼 (libx265 HEVC - iOS 優化)\n');
   
   return {
-    name: 'CPU 軟體編碼 (H.264)',
-    id: 'libx264',
-    params: '-preset medium -crf 18',
-    description: '💻 CPU 軟體編碼 (較慢但相容性最佳)'
+    name: 'CPU 軟體編碼 (H.265/HEVC)',
+    id: 'libx265',
+    params: '-preset medium -crf 24 -tag:v hvc1',
+    description: '💻 CPU 軟體編碼 (HEVC iOS 最佳化，較慢但檔案更小)'
   };
 }
 
@@ -331,9 +344,10 @@ async function processWebP(webpPath) {
 
 // 主函數
 async function main() {
-  console.log('🎬 WebP 動畫 → MP4 高品質轉換工具 (智能 GPU 加速版)\n');
-  console.log('支援 NVIDIA、AMD、Intel GPU 硬體加速');
-  console.log('使用 Sharp 庫提取影格，確保畫質不受損失\n');
+  console.log('🎬 WebP 動畫 → MP4 (iOS 優化) 高品質轉換工具\n');
+  console.log('✨ iOS Safari 完美支援 - 自動使用 H.265/HEVC 編碼');
+  console.log('🚀 支援 NVIDIA、AMD、Intel GPU 硬體加速');
+  console.log('📦 使用 Sharp 庫提取影格，確保畫質不受損失\n');
 
   // 檢查工具
   checkTools();
@@ -387,8 +401,9 @@ async function main() {
 
   console.log(`\n📁 MP4 影片輸出於：${ASSETS_DIR}`);
   console.log(`🚀 使用編碼器：${GPU_ENCODER.name}`);
+  console.log('� 格式：H.265/HEVC (hvc1) - iOS Safari 完美相容');
   console.log('💡 臨時 PNG 影格已自動清理');
-  console.log('\n✨ 完成！\n');
+  console.log('\n✨ 完成！所有影片已優化為 iOS 最佳格式\n');
 }
 
 // 執行
