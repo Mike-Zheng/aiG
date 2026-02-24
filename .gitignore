@@ -24,3 +24,7 @@ Thumbs.db
 
 # Assets
 assets/
+
+# Sources temp files
+sources/temp/
+sources/*.webp
