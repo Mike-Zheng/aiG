@@ -216,7 +216,8 @@
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
       }
 
-      .gallery-item img {
+      .gallery-item img,
+      .gallery-item video {
         width: 100%;
         height: auto;
         display: block;
@@ -226,7 +227,12 @@
         transition: transform 0.3s ease;
       }
 
-      .gallery-item:hover img {
+      .gallery-item video {
+        display: none;
+      }
+
+      .gallery-item:hover img,
+      .gallery-item:hover video {
         transform: scale(1.05);
       }
 
@@ -431,7 +437,8 @@
         </svg>
       </div>
       <div class="modal-content">
-        <img id="modal-img" src="" alt="" />
+        <img id="modal-img" src="" alt="" style="display: none;" />
+        <video id="modal-video" src="" loop autoplay muted playsinline style="display: none; max-width: 100%; max-height: 90vh;"></video>
       </div>
     </div>
 
@@ -448,8 +455,9 @@
           this.thumbUrls = new Map();
           this.activeState = {
             id: null,
-            imgEl: null,
+            element: null,
             animUrl: null,
+            type: null,
           };
 
           // Virtual Scroller 狀態
@@ -600,6 +608,7 @@
             url: this.thumbUrls.get(id),
             width: this.indexMap[id].width,
             height: this.indexMap[id].height,
+            type: this.indexMap[id].type || 'webp', // 向下相容舊版 .bin 檔
           };
         }
 
@@ -609,7 +618,7 @@
 
         handleTap(e) {
           const target = e.target;
-          if (target.tagName !== "IMG" || !target.dataset.id) return;
+          if ((target.tagName !== "IMG" && target.tagName !== "VIDEO") || !target.dataset.id) return;
 
           const id = target.dataset.id;
 
@@ -631,61 +640,111 @@
           this.playAnimation(id, target);
         }
 
-        playAnimation(id, imgEl) {
+        playAnimation(id, element) {
           const meta = this.indexMap[id];
           if (!meta) {
             console.warn(`⚠️  動畫不存在: ${id}`);
             return;
           }
 
+          const type = meta.type || 'webp';
+          
           // 從 ArrayBuffer 切割動畫資料 (Zero-copy)
           const slice = this.buffer.slice(
             this.payloadStart + meta.anim.offset,
             this.payloadStart + meta.anim.offset + meta.anim.length,
           );
 
+          // 根據類型建立對應的 MIME type
+          const mimeTypes = {
+            'webp': 'image/webp',
+            'gif': 'image/gif',
+            'mp4': 'video/mp4'
+          };
+
           // 建立 Blob URL
           const animUrl = URL.createObjectURL(
-            new Blob([slice], { type: "image/webp" }),
+            new Blob([slice], { type: mimeTypes[type] || 'image/webp' }),
           );
 
-          // 更新狀態與畫面
-          this.activeState = { id, imgEl, animUrl };
-          imgEl.src = animUrl;
+          // 取得容器中的 img 和 video 元素
+          const item = element.closest('.gallery-item');
+          const imgEl = item.querySelector('img');
+          const videoEl = item.querySelector('video');
 
-          // 開始監聽是否離開視窗
-          this.animationObserver.observe(imgEl);
+          // 根據類型選擇使用 img 或 video
+          if (type === 'mp4') {
+            imgEl.style.display = 'none';
+            videoEl.style.display = 'block';
+            videoEl.src = animUrl;
+            videoEl.load();
+            videoEl.play();
+            this.activeState = { id, element: videoEl, animUrl, type };
+            this.animationObserver.observe(videoEl);
+          } else {
+            videoEl.style.display = 'none';
+            imgEl.style.display = 'block';
+            imgEl.src = animUrl;
+            this.activeState = { id, element: imgEl, animUrl, type };
+            this.animationObserver.observe(imgEl);
+          }
         }
 
         stopActiveAnimation() {
           if (!this.activeState.id) return;
 
-          // 停止監聽
-          this.animationObserver.unobserve(this.activeState.imgEl);
+          const { id, element, animUrl, type } = this.activeState;
 
-          // 恢復縮圖
-          const thumbUrl = this.thumbUrls.get(this.activeState.id);
-          if (thumbUrl) {
-            this.activeState.imgEl.src = thumbUrl;
+          // 停止監聽
+          this.animationObserver.unobserve(element);
+
+          // 取得容器
+          const item = element.closest('.gallery-item');
+          const imgEl = item.querySelector('img');
+          const videoEl = item.querySelector('video');
+
+          // 根據類型恢復縮圖
+          const thumbUrl = this.thumbUrls.get(id);
+          if (type === 'mp4') {
+            videoEl.pause();
+            videoEl.src = '';
+            videoEl.style.display = 'none';
+            if (thumbUrl) {
+              imgEl.src = thumbUrl;
+              imgEl.style.display = 'block';
+            }
+          } else {
+            if (thumbUrl) {
+              imgEl.src = thumbUrl;
+            }
+            imgEl.style.display = 'block';
+            videoEl.style.display = 'none';
           }
 
           // 釋放動畫 Blob URL 記憶體
-          URL.revokeObjectURL(this.activeState.animUrl);
+          URL.revokeObjectURL(animUrl);
 
           // 重置狀態
-          this.activeState = { id: null, imgEl: null, animUrl: null };
+          this.activeState = { id: null, element: null, animUrl: null, type: null };
         }
 
         getAnimationUrl(id) {
           const meta = this.indexMap[id];
           if (!meta) return null;
 
+          const type = meta.type || 'webp';
+          const mimeTypes = {
+            'webp': 'image/webp',
+            'gif': 'image/gif',
+            'mp4': 'video/mp4'
+          };
+
           const slice = this.buffer.slice(
             this.payloadStart + meta.anim.offset,
             this.payloadStart + meta.anim.offset + meta.anim.length,
           );
 
-          return URL.createObjectURL(new Blob([slice], { type: "image/webp" }));
+          return URL.createObjectURL(new Blob([slice], { type: mimeTypes[type] || 'image/webp' }));
         }
 
         dispose() {
@@ -721,6 +780,7 @@
       const fileInput = document.getElementById("file-input");
       const modal = document.getElementById("modal");
       const modalImg = document.getElementById("modal-img");
+      const modalVideo = document.getElementById("modal-video");
       const modalClose = document.getElementById("modal-close");
       const destroyBtn = document.getElementById("destroy-btn");
 
@@ -816,6 +876,15 @@
           img.dataset.id = id;
           // 不設置 src - 等待 IntersectionObserver 觸發加載
 
+          // 為 MP4 格式添加 video 元素
+          const video = document.createElement("video");
+          video.alt = id;
+          video.dataset.id = id;
+          video.loop = true;
+          video.muted = true;
+          video.playsInline = true;
+          video.style.display = 'none';
+
           // 右下角全屏圖標
           const fullscreenIcon = document.createElement("div");
           fullscreenIcon.className = "fullscreen-icon";
@@ -830,6 +899,7 @@
           };
 
           item.appendChild(img);
+          item.appendChild(video);
           item.appendChild(fullscreenIcon);
           fragment.appendChild(item);
 
@@ -855,10 +925,22 @@
         // 取得動畫 URL
         currentModalUrl = engine.getAnimationUrl(id);
 
-        modalImg.src = currentModalUrl;
+        // 根據類型選擇顯示元素
+        if (data.type === 'mp4') {
+          modalImg.style.display = 'none';
+          modalVideo.style.display = 'block';
+          modalVideo.src = currentModalUrl;
+          modalVideo.load();
+          modalVideo.play();
+        } else {
+          modalVideo.style.display = 'none';
+          modalImg.style.display = 'block';
+          modalImg.src = currentModalUrl;
+        }
+
         modal.classList.add("active");
 
-        console.log(`▶️ 播放：${id} (${data.width} × ${data.height})`);
+        console.log(`▶️ 播放：${id} (${data.width} × ${data.height}) [${data.type.toUpperCase()}]`);
 
         // 防止背景滾動
         document.body.style.overflow = "hidden";
@@ -868,6 +950,12 @@
       function closeModal() {
         modal.classList.remove("active");
         document.body.style.overflow = "";
+
+        // 停止視頻播放
+        if (modalVideo.src) {
+          modalVideo.pause();
+          modalVideo.src = "";
+        }
 
         // 釋放動畫 URL
         if (currentModalUrl) {
@@ -932,6 +1020,10 @@
       // 頁面卸載時清理資源
       window.addEventListener("beforeunload", () => {
         engine.dispose();
+        if (modalVideo.src) {
+          modalVideo.pause();
+          modalVideo.src = "";
+        }
         if (currentModalUrl) {
           URL.revokeObjectURL(currentModalUrl);
         }

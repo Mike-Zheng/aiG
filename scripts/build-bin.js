@@ -1,9 +1,10 @@
 // scripts/build-bin.js
-// 建置期打包腳本：將所有 WebP 動畫與縮圖封裝成單一 .bin 檔案
+// 建置期打包腳本：將所有 WebP/GIF/MP4 動畫與縮圖封裝成單一 .bin 檔案
 import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
 import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,7 +14,7 @@ const DIST_DIR = path.join(__dirname, '..', 'dist');
 const OUTPUT_FILE = path.join(DIST_DIR, 'data.bin');
 
 async function build() {
-  console.log('🚀 開始建置 WebP 動畫資料庫...\n');
+  console.log('🚀 開始建置 WebP/GIF/MP4 動畫資料庫...\n');
 
   // 確保 assets 目錄存在
   if (!fs.existsSync(ASSETS_DIR)) {
@@ -21,42 +22,93 @@ async function build() {
     process.exit(1);
   }
 
-  // 讀取所有 .webp 檔案
-  const files = fs.readdirSync(ASSETS_DIR).filter(f => f.endsWith('.webp'));
+  // 讀取所有支援的動畫檔案 (.webp, .gif, .mp4)
+  const files = fs.readdirSync(ASSETS_DIR).filter(f => 
+    f.endsWith('.webp') || f.endsWith('.gif') || f.endsWith('.mp4')
+  );
   
   if (files.length === 0) {
-    console.error('❌ 錯誤：assets 目錄中沒有找到 .webp 檔案');
-    console.log('💡 提示：請將 WebP 動畫檔案放置在 assets/ 目錄中');
+    console.error('❌ 錯誤：assets 目錄中沒有找到支援的動畫檔案');
+    console.log('💡 提示：請將 WebP/GIF/MP4 動畫檔案放置在 assets/ 目錄中');
     process.exit(1);
   }
 
-  console.log(`📂 找到 ${files.length} 個 WebP 檔案`);
+  // 依類型分組統計
+  const stats = { webp: 0, gif: 0, mp4: 0 };
+  files.forEach(f => {
+    if (f.endsWith('.webp')) stats.webp++;
+    else if (f.endsWith('.gif')) stats.gif++;
+    else if (f.endsWith('.mp4')) stats.mp4++;
+  });
+  
+  console.log(`📂 找到 ${files.length} 個動畫檔案`);
+  console.log(`   WebP: ${stats.webp} | GIF: ${stats.gif} | MP4: ${stats.mp4}`);
 
   let offset = 0;
   const indexMap = {};
   const buffers = [];
 
-  // 處理每個 WebP 檔案
+  // 處理每個動畫檔案
   for (const file of files) {
-    const id = file.replace('.webp', '');
+    const ext = path.extname(file).toLowerCase();
+    const id = file.replace(ext, '');
     const filePath = path.join(ASSETS_DIR, file);
     const animBuffer = fs.readFileSync(filePath);
     
     console.log(`   處理中: ${file}`);
 
     try {
-      // 取得 Metadata (寬高)
-      const metadata = await sharp(animBuffer).metadata();
-      
-      // 抽出第一幀轉為靜態 WebP 縮圖
-      const thumbBuffer = await sharp(animBuffer)
-        .webp({ quality: 80 })
-        .toBuffer();
+      let thumbBuffer;
+      let width, height;
+      let type = ext.replace('.', ''); // 'webp', 'gif', 'mp4'
+
+      if (ext === '.webp' || ext === '.gif') {
+        // WebP 和 GIF 使用 sharp 處理
+        const metadata = await sharp(animBuffer).metadata();
+        width = metadata.width;
+        height = metadata.height;
+
+        // 提取首幀轉為 WebP 縮圖
+        thumbBuffer = await sharp(animBuffer)
+          .webp({ quality: 80 })
+          .toBuffer();
+
+      } else if (ext === '.mp4') {
+        // MP4 使用 ffmpeg 提取首幀
+        const tempInput = path.join(ASSETS_DIR, `temp_${id}.mp4`);
+        const tempOutput = path.join(ASSETS_DIR, `temp_${id}_thumb.webp`);
+        
+        try {
+          // 寫入臨時檔案
+          fs.writeFileSync(tempInput, animBuffer);
+          
+          // 使用 ffmpeg 提取第一幀並轉為 WebP
+          execSync(
+            `ffmpeg -i "${tempInput}" -vframes 1 -q:v 2 "${tempOutput}" -y`,
+            { stdio: 'ignore' }
+          );
+          
+          // 讀取縮圖並取得尺寸
+          thumbBuffer = fs.readFileSync(tempOutput);
+          const metadata = await sharp(thumbBuffer).metadata();
+          width = metadata.width;
+          height = metadata.height;
+          
+          // 清理臨時檔案
+          fs.unlinkSync(tempInput);
+          fs.unlinkSync(tempOutput);
+        } catch (error) {
+          console.error(`      ✗ FFmpeg 處理失敗: ${error.message}`);
+          console.log(`      💡 請確認已安裝 ffmpeg 並加入 PATH`);
+          continue;
+        }
+      }
 
       // 記錄索引資訊
       indexMap[id] = {
-        width: metadata.width,
-        height: metadata.height,
+        type,
+        width,
+        height,
         thumb: { 
           offset, 
           length: thumbBuffer.length 
@@ -71,7 +123,7 @@ async function build() {
       buffers.push(thumbBuffer, animBuffer);
       offset += (thumbBuffer.length + animBuffer.length);
 
-      console.log(`      ✓ ${metadata.width}x${metadata.height} | 縮圖: ${(thumbBuffer.length / 1024).toFixed(2)}KB | 動畫: ${(animBuffer.length / 1024).toFixed(2)}KB`);
+      console.log(`      ✓ [${type.toUpperCase()}] ${width}x${height} | 縮圖: ${(thumbBuffer.length / 1024).toFixed(2)}KB | 動畫: ${(animBuffer.length / 1024).toFixed(2)}KB`);
     } catch (error) {
       console.error(`      ✗ 處理失敗: ${error.message}`);
       continue;
