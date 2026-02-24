@@ -179,6 +179,7 @@
         animation: fadeIn 0.5s ease-out backwards;
         cursor: pointer;
         min-height: 150px;
+        touch-action: manipulation; /* 禁用雙擊縮放，加速雙擊響應 */
       }
 
       .gallery-item.placeholder {
@@ -225,6 +226,7 @@
         user-select: none;
         cursor: pointer;
         transition: transform 0.3s ease;
+        touch-action: manipulation; /* 禁用雙擊縮放，加速雙擊響應 */
       }
 
       .gallery-item video {
@@ -460,6 +462,16 @@
             type: null,
           };
 
+          // 點擊延迟計時器（防止單擊和雙擊衝突）
+          this.clickTimer = null;
+          this.clickDelay = 250; // 250ms 延遲
+
+          // 移動設備雙擊檢測
+          this.lastTapTime = 0;
+          this.lastTapTarget = null;
+          this.doubleTapDelay = 300; // 300ms 內視為雙擊
+          this.justDoubleTapped = false; // 標記是否剛剛雙擊（防止觸發單擊）
+
           // Virtual Scroller 狀態
           this.allIds = [];
           this.renderedItems = new Map(); // id -> {element, isLoaded}
@@ -502,9 +514,14 @@
             },
           );
 
-          // 綁定事件代理 (Fast Click)
+          // 綁定事件代理
           this.handleTap = this.handleTap.bind(this);
+          this.handleDoubleTap = this.handleDoubleTap.bind(this);
+          this.handleTouchEnd = this.handleTouchEnd.bind(this);
+          
           this.container.addEventListener("click", this.handleTap);
+          this.container.addEventListener("dblclick", this.handleDoubleTap);
+          this.container.addEventListener("touchend", this.handleTouchEnd);
         }
 
         async loadFromFile(file) {
@@ -620,24 +637,124 @@
           const target = e.target;
           if ((target.tagName !== "IMG" && target.tagName !== "VIDEO") || !target.dataset.id) return;
 
-          const id = target.dataset.id;
-
-          // 點擊同一個正在播放的 -> 停止
-          if (this.activeState.id === id) {
-            console.log(`⏹️  停止動畫: ${id}`);
-            this.stopActiveAnimation();
+          // 如果剛剛觸發了移動雙擊，忽略這次單擊
+          if (this.justDoubleTapped) {
+            this.justDoubleTapped = false;
             return;
           }
 
-          // 點擊新的 -> 先停止舊的，再播新的
+          const id = target.dataset.id;
+
+          // 清除之前的單擊計時器
+          if (this.clickTimer) {
+            clearTimeout(this.clickTimer);
+            this.clickTimer = null;
+          }
+
+          // 延遲執行單擊操作（給雙擊機會）
+          this.clickTimer = setTimeout(() => {
+            this.clickTimer = null;
+            this.justDoubleTapped = false; // 重置標誌
+            
+            // 點擊同一個正在播放的 -> 停止
+            if (this.activeState.id === id) {
+              console.log(`⏹️  停止動畫: ${id}`);
+              this.stopActiveAnimation();
+              return;
+            }
+
+            // 點擊新的 -> 先停止舊的，再播新的
+            if (this.activeState.id) {
+              console.log(`⏹️  停止前一個動畫: ${this.activeState.id}`);
+              this.stopActiveAnimation();
+            }
+
+            // JIT 建立動畫 Blob
+            console.log(`▶️  播放動畫: ${id}`);
+            this.playAnimation(id, target);
+          }, this.clickDelay);
+        }
+
+        handleDoubleTap(e) {
+          const target = e.target;
+          if ((target.tagName !== "IMG" && target.tagName !== "VIDEO") || !target.dataset.id) return;
+
+          // 阻止單擊事件執行
+          if (this.clickTimer) {
+            clearTimeout(this.clickTimer);
+            this.clickTimer = null;
+          }
+
+          const id = target.dataset.id;
+          console.log(`🖼️  雙擊全螢幕: ${id}`);
+
+          // 停止當前播放（如果有）
           if (this.activeState.id) {
-            console.log(`⏹️  停止前一個動畫: ${this.activeState.id}`);
             this.stopActiveAnimation();
           }
 
-          // JIT 建立動畫 Blob
-          console.log(`▶️  播放動畫: ${id}`);
-          this.playAnimation(id, target);
+          // 觸發全螢幕模態框
+          const item = target.closest('.gallery-item');
+          if (item) {
+            const fullscreenIcon = item.querySelector('.fullscreen-icon');
+            if (fullscreenIcon) {
+              fullscreenIcon.click();
+            }
+          }
+        }
+
+        handleTouchEnd(e) {
+          // 移動設備雙擊檢測
+          const target = e.target;
+          if ((target.tagName !== "IMG" && target.tagName !== "VIDEO") || !target.dataset.id) return;
+
+          const currentTime = Date.now();
+          const timeDiff = currentTime - this.lastTapTime;
+
+          // 檢測是否為雙擊（300ms 內且同一目標）
+          if (timeDiff < this.doubleTapDelay && this.lastTapTarget === target) {
+            // 這是雙擊！
+            e.preventDefault(); // 防止觸發其他事件
+            
+            // 設置標誌，防止後續的 click 事件觸發單擊
+            this.justDoubleTapped = true;
+            
+            // 取消單擊計時器
+            if (this.clickTimer) {
+              clearTimeout(this.clickTimer);
+              this.clickTimer = null;
+            }
+
+            const id = target.dataset.id;
+            console.log(`📱 移動雙擊全螢幕: ${id}`);
+
+            // 停止當前播放（如果有）
+            if (this.activeState.id) {
+              this.stopActiveAnimation();
+            }
+
+            // 觸發全螢幕模態框
+            const item = target.closest('.gallery-item');
+            if (item) {
+              const fullscreenIcon = item.querySelector('.fullscreen-icon');
+              if (fullscreenIcon) {
+                fullscreenIcon.click();
+              }
+            }
+
+            // 重置雙擊檢測
+            this.lastTapTime = 0;
+            this.lastTapTarget = null;
+            
+            // 500ms 後重置標誌（防止影響下次點擊）
+            setTimeout(() => {
+              this.justDoubleTapped = false;
+            }, 500);
+          } else {
+            // 記錄這次點擊
+            this.lastTapTime = currentTime;
+            this.lastTapTarget = target;
+          }
         }
 
         playAnimation(id, element) {
@@ -700,29 +817,43 @@
 
           // 取得容器
           const item = element.closest('.gallery-item');
+          if (!item) {
+            // 如果找不到容器（可能已被移除），只釋放 URL
+            if (animUrl) {
+              URL.revokeObjectURL(animUrl);
+            }
+            this.activeState = { id: null, element: null, animUrl: null, type: null };
+            return;
+          }
+
           const imgEl = item.querySelector('img');
           const videoEl = item.querySelector('video');
 
-          // 根據類型恢復縮圖
+          // 根據類型恢復縮圖並完整清理資源
           const thumbUrl = this.thumbUrls.get(id);
-          if (type === 'mp4') {
+          if (type === 'mp4' && videoEl) {
+            // 停止視頻並完整清理
             videoEl.pause();
-            videoEl.src = '';
+            videoEl.removeAttribute('src');
+            videoEl.load(); // 觸發資源釋放
             videoEl.style.display = 'none';
-            if (thumbUrl) {
+            
+            if (thumbUrl && imgEl) {
               imgEl.src = thumbUrl;
               imgEl.style.display = 'block';
             }
           } else {
-            if (thumbUrl) {
+            if (thumbUrl && imgEl) {
               imgEl.src = thumbUrl;
             }
-            imgEl.style.display = 'block';
-            videoEl.style.display = 'none';
+            if (imgEl) imgEl.style.display = 'block';
+            if (videoEl) videoEl.style.display = 'none';
           }
 
-          // 釋放動畫 Blob URL 記憶體
-          URL.revokeObjectURL(animUrl);
+          // 釋放動畫 Blob URL 記憶體（關鍵 GC 步驟）
+          if (animUrl) {
+            URL.revokeObjectURL(animUrl);
+          }
 
           // 重置狀態
           this.activeState = { id: null, element: null, animUrl: null, type: null };
@@ -750,26 +881,47 @@
         dispose() {
           console.log("🗑️  正在銷毀 GalleryEngine...");
 
+          // 清除任何待執行的單擊計時器
+          if (this.clickTimer) {
+            clearTimeout(this.clickTimer);
+            this.clickTimer = null;
+          }
+
+          // 停止當前播放並釋放資源
           this.stopActiveAnimation();
+          
+          // 移除所有事件監聽器
           this.container.removeEventListener("click", this.handleTap);
+          this.container.removeEventListener("dblclick", this.handleDoubleTap);
+          this.container.removeEventListener("touchend", this.handleTouchEnd);
           this.animationObserver.disconnect();
           this.virtualObserver.disconnect();
 
-          // 釋放所有縮圖 URL
+          // 釋放所有縮圖 URL（關鍵 GC 步驟）
           for (const url of this.thumbUrls.values()) {
             URL.revokeObjectURL(url);
           }
           this.thumbUrls.clear();
           this.loadedThumbs.clear();
+          
+          // 清理所有 video 元素（確保釋放記憶體）
+          this.renderedItems.forEach(({ element }) => {
+            const videoEl = element.querySelector('video');
+            if (videoEl) {
+              videoEl.pause();
+              videoEl.removeAttribute('src');
+              videoEl.load();
+            }
+          });
           this.renderedItems.clear();
 
-          // 清空資料
+          // 清空資料緩衝區引用
           this.buffer = null;
           this.indexMap = null;
           this.allIds = [];
           this.container.innerHTML = "";
 
-          console.log("✅ 銷毀完成 - 所有資源已釋放");
+          console.log("✅ 銷毀完成 - 所有資源已釋放並準備 GC");
         }
       }
 
@@ -951,20 +1103,29 @@
         modal.classList.remove("active");
         document.body.style.overflow = "";
 
-        // 停止視頻播放
+        // 完整停止並清理視頻播放（確保 GC）
         if (modalVideo.src) {
           modalVideo.pause();
-          modalVideo.src = "";
+          modalVideo.removeAttribute('src');
+          modalVideo.load(); // 觸發資源釋放
         }
 
-        // 釋放動畫 URL
+        // 清理圖片
+        if (modalImg.src) {
+          modalImg.src = "";
+        }
+
+        // 釋放動畫 URL（關鍵 GC 步驟）
         if (currentModalUrl) {
           URL.revokeObjectURL(currentModalUrl);
           currentModalUrl = null;
         }
 
-        modalImg.src = "";
-        console.log("⏹️ 停止播放");
+        // 重置顯示狀態
+        modalImg.style.display = 'none';
+        modalVideo.style.display = 'none';
+
+        console.log("⏹️ 停止播放 - 資源已釋放");
       }
 
       modalClose.addEventListener("click", closeModal);
@@ -1017,16 +1178,31 @@
         }, 100);
       }
 
-      // 頁面卸載時清理資源
+      // 頁面卸載時清理資源（確保最高效能 GC）
       window.addEventListener("beforeunload", () => {
+        // 關閉模態框並清理
+        if (modal.classList.contains('active')) {
+          closeModal();
+        }
+        
+        // 銷毀引擎（會自動清理所有資源）
         engine.dispose();
+        
+        // 額外確保模態框資源被釋放
         if (modalVideo.src) {
           modalVideo.pause();
-          modalVideo.src = "";
+          modalVideo.removeAttribute('src');
+          modalVideo.load();
+        }
+        if (modalImg.src) {
+          modalImg.src = "";
         }
         if (currentModalUrl) {
           URL.revokeObjectURL(currentModalUrl);
+          currentModalUrl = null;
         }
+        
+        console.log("🚪 頁面卸載 - 所有資源已清理");
       });
 
       // ==================== PWA 支援 ====================
