@@ -7,7 +7,6 @@ import path from "path";
 import { execSync } from "child_process";
 import { fileURLToPath } from "url";
 import sharp from "sharp";
-import os from "os";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,139 +16,15 @@ const SOURCES_DIR = path.join(__dirname, "..", "sources");
 const TEMP_DIR = path.join(SOURCES_DIR, "temp");
 const ASSETS_DIR = path.join(__dirname, "..", "assets");
 
-// GPU 編碼器配置（全域變數）
-let GPU_ENCODER = null;
-
-// 測試編碼器是否真正可用（運行時測試）
-function testEncoder(encoderId, params) {
-  try {
-    // 創建一個 1x1 的測試圖片
-    const testDir = path.join(os.tmpdir(), "ffmpeg-test-" + Date.now());
-    const testFrame = path.join(testDir, "test.png");
-    const testOutput = path.join(testDir, "test.mp4");
-
-    // 創建測試目錄
-    if (!fs.existsSync(testDir)) {
-      fs.mkdirSync(testDir, { recursive: true });
-    }
-
-    // 生成一個簡單的測試影格（256x256 符合 NVENC 最小尺寸）
-    execSync(
-      `ffmpeg -f lavfi -i color=black:s=256x256:d=0.1 -frames:v 1 "${testFrame}" -y`,
-      { stdio: "ignore", timeout: 5000 },
-    );
-
-    // 測試編碼器
-    const testCmd = `ffmpeg -framerate 25 -i "${testFrame}" -frames:v 1 -c:v ${encoderId} ${params} -pix_fmt yuv420p "${testOutput}" -y`;
-    execSync(testCmd, { stdio: "ignore", timeout: 10000 });
-
-    // 清理測試檔案
-    fs.rmSync(testDir, { recursive: true, force: true });
-
-    return true;
-  } catch (error) {
-    // 清理失敗的測試檔案
-    try {
-      const testDir = path.join(os.tmpdir(), "ffmpeg-test-" + Date.now());
-      if (fs.existsSync(testDir)) {
-        fs.rmSync(testDir, { recursive: true, force: true });
-      }
-    } catch {}
-
-    return false;
-  }
-}
-
-// 檢測可用的 GPU 編碼器
-function detectGPUEncoder() {
-  console.log("🔍 檢測可用的 GPU 硬體加速...\n");
-
-  // iOS 優化：優先使用 HEVC (H.265) 編碼器
-  // 修復 FFmpeg 7.1.x Bug：移除 -profile:v 避免參數解析錯誤
-  // const encoders = [
-  //   {
-  //     name: "NVIDIA NVENC (H.265/HEVC)",
-  //     id: "hevc_nvenc",
-  //     // 極限優化：CQ 升至 32，加大 GOP (-g 150)，強制 3 個 B-frame，設定碼率上限防突波
-  //     params:
-  //       "-preset p6 -tune hq -rc vbr -cq 32 -b:v 0 -maxrate 3M -bufsize 6M -g 150 -bf 3 -b_ref_mode middle -spatial-aq 1 -temporal-aq 1 -rc-lookahead 32 -color_primaries bt709 -color_trc bt709 -colorspace bt709 -tag:v hvc1",
-  //     description:
-  //       "🚀 NVIDIA GPU (HEVC 極限壓縮：加大 GOP 與 B-frame + iOS 顯色)",
-  //   },
-  //   {
-  //     name: "AMD AMF (H.265/HEVC)",
-  //     id: "hevc_amf",
-  //     // 極限優化：放棄 CQP 強制量化，改用 VBR，加大 GOP
-  //     params:
-  //       "-quality quality -rc vbr_latency -qp_i 32 -qp_p 32 -g 150 -color_primaries bt709 -color_trc bt709 -colorspace bt709 -tag:v hvc1",
-  //     description: "🚀 AMD GPU (HEVC 極限壓縮 + iOS 顯色)",
-  //   },
-  //   {
-  //     name: "Intel Quick Sync (H.265/HEVC)",
-  //     id: "hevc_qsv",
-  //     // 極限優化：提高全局品質，加大 GOP，強制 B-frame
-  //     params:
-  //       "-preset veryslow -global_quality 32 -look_ahead 1 -g 150 -bf 3 -color_primaries bt709 -color_trc bt709 -colorspace bt709 -tag:v hvc1",
-  //     description: "🚀 Intel GPU (HEVC 極限壓縮 + iOS 顯色)",
-  //   },
-  //   {
-  //     name: "NVIDIA NVENC (H.264)",
-  //     id: "h264_nvenc",
-  //     params:
-  //       "-preset p6 -tune hq -rc vbr -cq 28 -b:v 0 -maxrate 3M -bufsize 6M -g 150 -bf 3 -spatial-aq 1 -temporal-aq 1 -rc-lookahead 32",
-  //     description: "🚀 NVIDIA GPU 硬體加速 (H.264 高效回退)",
-  //   },
-  //   {
-  //     name: "AMD AMF (H.264)",
-  //     id: "h264_amf",
-  //     params: "-quality quality -rc vbr_latency -qp_i 28 -qp_p 28 -g 150",
-  //     description: "🚀 AMD GPU 硬體加速 (H.264 回退)",
-  //   },
-  //   {
-  //     name: "Intel Quick Sync (H.264)",
-  //     id: "h264_qsv",
-  //     params: "-preset veryslow -global_quality 28 -look_ahead 1 -g 150 -bf 3",
-  //     description: "🚀 Intel GPU 硬體加速 (H.264 回退)",
-  //   },
-  // ];
-
-  // for (const encoder of encoders) {
-  //   // 先檢查編碼器是否存在
-  //   try {
-  //     const checkCmd =
-  //       process.platform === "win32"
-  //         ? `ffmpeg -hide_banner -encoders 2>&1 | findstr /C:"${encoder.id}"`
-  //         : `ffmpeg -hide_banner -encoders 2>&1 | grep "${encoder.id}"`;
-
-  //     execSync(checkCmd, { stdio: "pipe" });
-  //   } catch {
-  //     continue; // 編碼器不存在，跳過
-  //   }
-
-  //   // 運行時測試編碼器
-  //   console.log(`   測試 ${encoder.name}...`);
-  //   if (testEncoder(encoder.id, encoder.params)) {
-  //     console.log(`   ✓ ${encoder.name} 可用\n`);
-  //     console.log(`   ${encoder.description}\n`);
-  //     return encoder;
-  //   } else {
-  //     console.log(`   ✗ ${encoder.name} 無法使用（可能是驅動或硬體問題）`);
-  //   }
-  // }
-
-  // 沒有找到可用的 GPU 編碼器，使用 CPU HEVC 編碼（iOS 優化）
-  console.log("   ⚠️  未偵測到可用的 GPU 硬體加速");
-  console.log("   將使用 CPU 軟體編碼 (libx265 HEVC - iOS 優化)\n");
-
-  return {
-    name: "CPU 軟體編碼 (H.265/HEVC)",
-    id: "libx265",
-    // 極限優化：CRF 32，預設 slow 爭取壓縮率，加大 keyint (GOP)
-    params:
-      "-preset slow -crf 32 -x265-params keyint=150:bf=4 -color_primaries bt709 -color_trc bt709 -colorspace bt709 -tag:v hvc1",
-    description: "💻 CPU 軟體編碼 (HEVC 極致壓縮，較慢但檔案最小)",
-  };
-}
+// 編碼器配置（使用 CPU H.265/HEVC）
+const GPU_ENCODER = {
+  name: "CPU 軟體編碼 (H.265/HEVC)",
+  id: "libx265",
+  // 極限優化：CRF 30，預設 slow 爭取壓縮率，加大 keyint (GOP)
+  params:
+    "-preset slow -crf 30 -x265-params keyint=150:bf=4 -color_primaries bt709 -color_trc bt709 -colorspace bt709 -tag:v hvc1",
+  description: "💻 CPU 軟體編碼 (HEVC 極致壓縮，較慢但檔案最小)",
+};
 
 // 檢查必要工具
 function checkTools() {
@@ -178,9 +53,6 @@ function checkTools() {
   }
 
   console.log("\n");
-
-  // 檢測並設置 GPU 編碼器
-  GPU_ENCODER = detectGPUEncoder();
 }
 
 // 確保目錄存在
@@ -365,8 +237,8 @@ async function processWebP(webpPath) {
 // 主函數
 async function main() {
   console.log("🎬 WebP 動畫 → MP4 (iOS 優化) 高品質轉換工具\n");
-  console.log("✨ iOS Safari 完美支援 - 自動使用 H.265/HEVC 編碼");
-  console.log("🚀 支援 NVIDIA、AMD、Intel GPU 硬體加速");
+  console.log("✨ iOS Safari 完美支援 - 使用 H.265/HEVC 編碼");
+  console.log("💻 使用 CPU 軟體編碼 (libx265)");
   console.log("📦 使用 Sharp 庫提取影格，確保畫質不受損失\n");
 
   // 檢查工具
