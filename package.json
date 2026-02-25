@@ -8,6 +8,7 @@
     "verify": "node scripts/verify-bin.js",
     "icons": "node scripts/generate-icons.js",
     "webp2mp4": "node scripts/webp-to-mp4.js",
+    "mp4-to-H265": "node ./scripts/mp4-to-H265.js",
     "dev": "npx http-server -p 8080 -o",
     "setup": "npm run icons && npm run build"
   },

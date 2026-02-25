@@ -28,3 +28,4 @@ assets/
 # Sources temp files
 sources/temp/
 sources/*.webp
+sources/*.mp4
