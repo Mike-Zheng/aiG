@@ -330,9 +330,28 @@
         background: rgba(255, 100, 100, 0.1);
         border: 2px solid rgba(255, 100, 100, 0.3);
         color: #ff6b6b;
-        padding: 20px;
+        padding: 30px;
         border-radius: 12px;
-        margin-top: 20px;
+        margin: 20px;
+        max-width: 500px;
+        text-align: center;
+      }
+
+      .error h3 {
+        margin: 0 0 15px 0;
+        font-size: 1.3em;
+      }
+
+      .error p {
+        margin: 10px 0;
+        line-height: 1.6;
+      }
+
+      .error code {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: monospace;
       }
 
       @media (max-width: 600px) {
@@ -453,6 +472,14 @@
           this.indexMap = null;
           this.payloadStart = 0;
 
+          // BIN 檔案簽名配置（需與 scripts/bin-signature.json 保持一致）
+          this.signatureConfig = {
+            secretKey: 'aiG-binary-package-secret-key-2026',
+            magicNumber: 'aiG.BIN',
+            version: '1.0.0',
+            algorithm: 'SHA-256'
+          };
+
           // 狀態管理
           this.thumbUrls = new Map();
           this.activeState = {
@@ -524,24 +551,123 @@
           this.container.addEventListener("touchend", this.handleTouchEnd);
         }
 
+        /**
+         * 驗證 BIN 檔案簽名
+         * @param {ArrayBuffer} buffer - BIN 檔案的 ArrayBuffer
+         * @returns {Promise<Object>} 驗證結果 {valid, magic, version, dataStartOffset}
+         */
+        async verifyBinFile(buffer) {
+          const view = new DataView(buffer);
+          let offset = 0;
+
+          // 檢查最小檔案大小
+          if (buffer.byteLength < 28) {
+            throw new Error('檔案大小不正確，可能不是有效的 BIN 檔案');
+          }
+
+          // 1. 讀取 Magic Number (8 bytes)
+          const magicBytes = new Uint8Array(buffer, offset, 8);
+          const magic = new TextDecoder().decode(magicBytes).replace(/\0/g, '');
+          offset += 8;
+
+          if (magic !== this.signatureConfig.magicNumber) {
+            throw new Error(`無效的檔案格式！預期: ${this.signatureConfig.magicNumber}, 實際: ${magic}`);
+          }
+
+          // 2. 讀取 Version (16 bytes)
+          const versionBytes = new Uint8Array(buffer, offset, 16);
+          const version = new TextDecoder().decode(versionBytes).replace(/\0/g, '');
+          offset += 16;
+
+          console.log(`📦 BIN 檔案版本: ${version}`);
+
+          // 3. 讀取簽名長度 (4 bytes)
+          const signatureLength = view.getUint32(offset, true);
+          offset += 4;
+
+          if (signatureLength <= 0 || signatureLength > 1024) {
+            throw new Error(`簽名長度異常: ${signatureLength}`);
+          }
+
+          // 4. 讀取儲存的簽名
+          const storedSignature = new Uint8Array(buffer, offset, signatureLength);
+          offset += signatureLength;
+
+          // 5. 剩餘的資料內容（用於驗證）
+          const dataBuffer = buffer.slice(offset);
+          const dataStartOffset = offset;
+
+          // 6. 使用 Web Crypto API 計算 HMAC-SHA256
+          console.log('🔐 正在驗證檔案簽名...');
+          const encoder = new TextEncoder();
+          const keyData = encoder.encode(this.signatureConfig.secretKey);
+          
+          const cryptoKey = await crypto.subtle.importKey(
+            'raw',
+            keyData,
+            { name: 'HMAC', hash: this.signatureConfig.algorithm },
+            false,
+            ['sign']
+          );
+
+          const calculatedSignature = await crypto.subtle.sign(
+            'HMAC',
+            cryptoKey,
+            dataBuffer
+          );
+
+          // 7. 比較簽名
+          const calculated = new Uint8Array(calculatedSignature);
+          
+          if (calculated.length !== storedSignature.length) {
+            throw new Error('簽名驗證失敗！檔案可能已被竄改或損壞');
+          }
+
+          for (let i = 0; i < calculated.length; i++) {
+            if (calculated[i] !== storedSignature[i]) {
+              throw new Error('簽名驗證失敗！檔案可能已被竄改或損壞');
+            }
+          }
+
+          console.log('✅ 簽名驗證通過');
+
+          return {
+            valid: true,
+            magic,
+            version,
+            dataStartOffset
+          };
+        }
+
         async loadFromFile(file) {
           console.log("🔄 正在載入資料庫...");
 
           try {
             this.buffer = await file.arrayBuffer();
-            const dataView = new DataView(this.buffer);
 
-            // 讀取 Header (4 bytes)：JSON 索引長度
-            const headerLen = dataView.getUint32(0, true);
+            // 驗證 BIN 檔案（包含 Magic Number 和簽名檢查）
+            const verifyResult = await this.verifyBinFile(this.buffer);
+            
+            if (!verifyResult.valid) {
+              throw new Error('BIN 檔案驗證失敗');
+            }
+
+            console.log(`📋 檔案資訊: ${verifyResult.magic} v${verifyResult.version}`);
+
+            // 從驗證後的資料位置開始解析
+            const dataView = new DataView(this.buffer, verifyResult.dataStartOffset);
+
+            // 讀取 JSON 索引長度 (4 bytes)
+            const jsonLength = dataView.getUint32(0, true);
 
             // 解析 JSON 索引
             const jsonStr = new TextDecoder().decode(
-              new Uint8Array(this.buffer, 4, headerLen),
+              new Uint8Array(this.buffer, verifyResult.dataStartOffset + 4, jsonLength),
             );
             this.indexMap = JSON.parse(jsonStr);
 
-            // 計算 Payload 起始位置
-            this.payloadStart = 4 + headerLen;
+            // 計算 Payload 起始位置（資料起始 + 4 bytes 長度 + JSON 內容）
+            this.payloadStart = verifyResult.dataStartOffset + 4 + jsonLength;
 
             console.log(
               `✅ 載入完成：共 ${Object.keys(this.indexMap).length} 個項目`,
@@ -1008,7 +1134,14 @@
           console.error("❌ 載入失敗:", error);
           loadingEl.innerHTML = `
           <div class="error">
-            <p>${error.message}</p>
+            <h3>❌ 檔案載入失敗</h3>
+            <p><strong>錯誤原因：</strong>${error.message}</p>
+            <p style="margin-top: 10px; font-size: 0.9em; opacity: 0.8;">
+              請確認您上傳的是由 <code>npm run build</code> 產生的有效 .bin 檔案
+            </p>
+            <button onclick="location.reload()" style="margin-top: 15px; padding: 10px 20px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white; border-radius: 5px; cursor: pointer;">
+              重新載入
+            </button>
           </div>
         `;
         }

@@ -1,0 +1,6 @@
+{
+  "secretKey": "aiG-binary-package-secret-key-2026",
+  "magicNumber": "aiG.BIN",
+  "version": "1.0.0",
+  "algorithm": "sha256"
+}

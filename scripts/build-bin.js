@@ -3,6 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 
@@ -12,6 +13,10 @@ const __dirname = path.dirname(__filename);
 const ASSETS_DIR = path.join(__dirname, '..', 'assets');
 const DIST_DIR = path.join(__dirname, '..', 'dist');
 const OUTPUT_FILE = path.join(DIST_DIR, 'data.bin');
+const SIGNATURE_CONFIG = path.join(__dirname, 'bin-signature.json');
+
+// 讀取簽名配置
+const signatureConfig = JSON.parse(fs.readFileSync(SIGNATURE_CONFIG, 'utf-8'));
 
 async function build() {
   console.log('🚀 開始建置 WebP/GIF/MP4 動畫資料庫...\n');
@@ -132,8 +137,28 @@ async function build() {
 
   // 建立 JSON 索引緩衝區
   const jsonBuffer = Buffer.from(JSON.stringify(indexMap), 'utf-8');
-  const headerBuffer = Buffer.alloc(4);
-  headerBuffer.writeUInt32LE(jsonBuffer.length, 0);
+  const jsonLengthBuffer = Buffer.alloc(4);
+  jsonLengthBuffer.writeUInt32LE(jsonBuffer.length, 0);
+
+  // 合併資料緩衝區（JSON索引 + 所有二進位資料）
+  const dataBuffer = Buffer.concat([jsonLengthBuffer, jsonBuffer, ...buffers]);
+
+  // 建立檔案頭部（Magic Number + Version + Signature）
+  // 1. Magic Number (8 bytes): 識別專用 bin 檔案
+  const magicBuffer = Buffer.alloc(8);
+  magicBuffer.write(signatureConfig.magicNumber, 0, 'utf-8');
+  
+  // 2. Version (16 bytes): 版本號
+  const versionBuffer = Buffer.alloc(16);
+  versionBuffer.write(signatureConfig.version, 0, 'utf-8');
+  
+  // 3. Signature: 對資料內容進行加密簽名
+  const hash = crypto.createHmac(signatureConfig.algorithm, signatureConfig.secretKey);
+  hash.update(dataBuffer);
+  const signatureBuffer = hash.digest();
+  
+  const signatureLengthBuffer = Buffer.alloc(4);
+  signatureLengthBuffer.writeUInt32LE(signatureBuffer.length, 0);
 
   // 確保 dist 目錄存在
   if (!fs.existsSync(DIST_DIR)) {
@@ -141,11 +166,22 @@ async function build() {
   }
 
   // 寫入最終 .bin 檔案
-  const finalBuffer = Buffer.concat([headerBuffer, jsonBuffer, ...buffers]);
+  // 結構：Magic + Version + SigLen + Signature + DataLen + Data
+  const finalBuffer = Buffer.concat([
+    magicBuffer,           // 8 bytes
+    versionBuffer,         // 16 bytes
+    signatureLengthBuffer, // 4 bytes
+    signatureBuffer,       // variable (通常 32 bytes for SHA-256)
+    dataBuffer             // variable
+  ]);
   fs.writeFileSync(OUTPUT_FILE, finalBuffer);
 
   console.log(`\n✅ 打包完成！`);
   console.log(`   檔案位置: ${OUTPUT_FILE}`);
+  console.log(`   Magic Number: ${signatureConfig.magicNumber}`);
+  console.log(`   版本: ${signatureConfig.version}`);
+  console.log(`   簽名演算法: ${signatureConfig.algorithm.toUpperCase()}`);
+  console.log(`   簽名長度: ${signatureBuffer.length} bytes`);
   console.log(`   總大小: ${(finalBuffer.length / 1024 / 1024).toFixed(2)} MB`);
   console.log(`   包含項目: ${Object.keys(indexMap).length} 個動畫\n`);
 }
