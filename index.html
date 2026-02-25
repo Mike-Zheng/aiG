@@ -26,9 +26,7 @@
         font-family:
           -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         background: #37383c;
-        padding: 20px;
         line-height: 1.6;
-        padding-bottom: 80px;
         min-height: 100vh;
       }
 
@@ -79,20 +77,32 @@
 
       .destroy-btn {
         position: fixed;
-        top: 10px;
+        bottom: 10px;
         left: 5px;
-        padding: 5px 24px;
-        background: #4a4b50;
         color: #fff;
-        border: none;
-        border-radius: 2px;
         font-size: 14px;
         font-weight: 600;
-        cursor: pointer;
-        transition: all 0.3s ease;
         z-index: 1000;
-        display: none;
+        width: 56px;
+        height: 56px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        padding: 0;
+        border: none;
+        text-decoration: none;
+        overflow: visible;
+        transition:
+          box-shadow 280ms cubic-bezier(0.4, 0, 0.2, 1),
+          opacity 15ms linear 30ms,
+          transform 270ms 0ms cubic-bezier(0, 0, 0.2, 1);
+        user-select: none;
+        cursor: pointer;
+        border-radius: 100px;
+        background-color: #1a1a1a;
         backdrop-filter: blur(10px);
+        display: none;
       }
 
       .destroy-btn:hover {
@@ -166,7 +176,8 @@
       #gallery {
         position: relative;
         width: 100%;
-        margin-top: 50px;
+        padding: 20px 10px;
+        /* margin-top: 50px; */
         min-height: 100vh;
       }
 
@@ -361,15 +372,6 @@
       }
 
       @media (max-width: 600px) {
-        body {
-          padding: 5px;
-          padding-bottom: 60px;
-        }
-
-        #gallery {
-          margin-top: 40px;
-        }
-
         .gallery-row {
           gap: 3px;
         }
@@ -467,8 +469,16 @@
         </svg>
       </div>
       <div class="modal-content">
-        <img id="modal-img" src="" alt="" style="display: none;" />
-        <video id="modal-video" src="" loop autoplay muted playsinline style="display: none; max-width: 100%; max-height: 90vh;"></video>
+        <img id="modal-img" src="" alt="" style="display: none" />
+        <video
+          id="modal-video"
+          src=""
+          loop
+          autoplay
+          muted
+          playsinline
+          style="display: none; max-width: 100%; max-height: 90vh"
+        ></video>
       </div>
     </div>
 
@@ -483,10 +493,10 @@
 
           // BIN 檔案簽名配置（需與 scripts/bin-signature.json 保持一致）
           this.signatureConfig = {
-            secretKey: 'aiG-binary-package-secret-key-2026',
-            magicNumber: 'aiG.BIN',
-            version: '1.0.0',
-            algorithm: 'SHA-256'
+            secretKey: "aiG-binary-package-secret-key-2026",
+            magicNumber: "aiG.BIN",
+            version: "1.0.0",
+            algorithm: "SHA-256",
           };
 
           // 狀態管理
@@ -513,6 +523,9 @@
           this.targetRowHeight = isMobile ? 120 : 200; // 目標行高（px）：移動端 120px，桌面 200px
           this.rowGap = isMobile ? 3 : 5; // 行間距（px）
           this.itemGap = isMobile ? 3 : 5; // 項目間距（px）
+          this.paddingX = 10; // 左右 padding（px）
+          this.paddingY = 20; // 上下 padding（px）
+          this.minItemsPerRow = 3; // 每行最小項目數（如果數量足夠）
           this.containerWidth = 0;
 
           // Virtual Scroller 狀態（行級別）
@@ -563,7 +576,7 @@
           this.handleTap = this.handleTap.bind(this);
           this.handleDoubleTap = this.handleDoubleTap.bind(this);
           this.handleTouchEnd = this.handleTouchEnd.bind(this);
-          
+
           this.container.addEventListener("click", this.handleTap);
           this.container.addEventListener("dblclick", this.handleDoubleTap);
           this.container.addEventListener("touchend", this.handleTouchEnd);
@@ -580,21 +593,25 @@
 
           // 檢查最小檔案大小
           if (buffer.byteLength < 28) {
-            throw new Error('檔案大小不正確，可能不是有效的 BIN 檔案');
+            throw new Error("檔案大小不正確，可能不是有效的 BIN 檔案");
           }
 
           // 1. 讀取 Magic Number (8 bytes)
           const magicBytes = new Uint8Array(buffer, offset, 8);
-          const magic = new TextDecoder().decode(magicBytes).replace(/\0/g, '');
+          const magic = new TextDecoder().decode(magicBytes).replace(/\0/g, "");
           offset += 8;
 
           if (magic !== this.signatureConfig.magicNumber) {
-            throw new Error(`無效的檔案格式！預期: ${this.signatureConfig.magicNumber}, 實際: ${magic}`);
+            throw new Error(
+              `無效的檔案格式！預期: ${this.signatureConfig.magicNumber}, 實際: ${magic}`,
+            );
           }
 
           // 2. 讀取 Version (16 bytes)
           const versionBytes = new Uint8Array(buffer, offset, 16);
-          const version = new TextDecoder().decode(versionBytes).replace(/\0/g, '');
+          const version = new TextDecoder()
+            .decode(versionBytes)
+            .replace(/\0/g, "");
           offset += 16;
 
           console.log(`📦 BIN 檔案版本: ${version}`);
@@ -608,7 +625,11 @@
           }
 
           // 4. 讀取儲存的簽名
-          const storedSignature = new Uint8Array(buffer, offset, signatureLength);
+          const storedSignature = new Uint8Array(
+            buffer,
+            offset,
+            signatureLength,
+          );
           offset += signatureLength;
 
           // 5. 剩餘的資料內容（用於驗證）
@@ -616,44 +637,44 @@
           const dataStartOffset = offset;
 
           // 6. 使用 Web Crypto API 計算 HMAC-SHA256
-          console.log('🔐 正在驗證檔案簽名...');
+          console.log("🔐 正在驗證檔案簽名...");
           const encoder = new TextEncoder();
           const keyData = encoder.encode(this.signatureConfig.secretKey);
-          
+
           const cryptoKey = await crypto.subtle.importKey(
-            'raw',
+            "raw",
             keyData,
-            { name: 'HMAC', hash: this.signatureConfig.algorithm },
+            { name: "HMAC", hash: this.signatureConfig.algorithm },
             false,
-            ['sign']
+            ["sign"],
           );
 
           const calculatedSignature = await crypto.subtle.sign(
-            'HMAC',
+            "HMAC",
             cryptoKey,
-            dataBuffer
+            dataBuffer,
           );
 
           // 7. 比較簽名
           const calculated = new Uint8Array(calculatedSignature);
-          
+
           if (calculated.length !== storedSignature.length) {
-            throw new Error('簽名驗證失敗！檔案可能已被竄改或損壞');
+            throw new Error("簽名驗證失敗！檔案可能已被竄改或損壞");
           }
 
           for (let i = 0; i < calculated.length; i++) {
             if (calculated[i] !== storedSignature[i]) {
-              throw new Error('簽名驗證失敗！檔案可能已被竄改或損壞');
+              throw new Error("簽名驗證失敗！檔案可能已被竄改或損壞");
             }
           }
 
-          console.log('✅ 簽名驗證通過');
+          console.log("✅ 簽名驗證通過");
 
           return {
             valid: true,
             magic,
             version,
-            dataStartOffset
+            dataStartOffset,
           };
         }
 
@@ -665,22 +686,31 @@
 
             // 驗證 BIN 檔案（包含 Magic Number 和簽名檢查）
             const verifyResult = await this.verifyBinFile(this.buffer);
-            
+
             if (!verifyResult.valid) {
-              throw new Error('BIN 檔案驗證失敗');
+              throw new Error("BIN 檔案驗證失敗");
             }
 
-            console.log(`📋 檔案資訊: ${verifyResult.magic} v${verifyResult.version}`);
+            console.log(
+              `📋 檔案資訊: ${verifyResult.magic} v${verifyResult.version}`,
+            );
 
             // 從驗證後的資料位置開始解析
-            const dataView = new DataView(this.buffer, verifyResult.dataStartOffset);
+            const dataView = new DataView(
+              this.buffer,
+              verifyResult.dataStartOffset,
+            );
 
             // 讀取 JSON 索引長度 (4 bytes)
             const jsonLength = dataView.getUint32(0, true);
 
             // 解析 JSON 索引
             const jsonStr = new TextDecoder().decode(
-              new Uint8Array(this.buffer, verifyResult.dataStartOffset + 4, jsonLength),
+              new Uint8Array(
+                this.buffer,
+                verifyResult.dataStartOffset + 4,
+                jsonLength,
+              ),
             );
             this.indexMap = JSON.parse(jsonStr);
 
@@ -710,31 +740,39 @@
          * 使用智能分配算法，讓每行圖片數量盡可能接近，避免最後一行過少
          */
         calculateRows() {
-          this.containerWidth = this.container.clientWidth || window.innerWidth - 40;
+          // 計算可用寬度（扣除左右 padding）
+          const fullWidth = this.container.clientWidth || window.innerWidth;
+          this.containerWidth = fullWidth - this.paddingX * 2;
           const targetHeight = this.targetRowHeight;
           const gap = this.itemGap;
-          
+
           // ===== 第一階段：預算行數和平均每行項目數 =====
           let totalScaledWidth = 0;
           const scaledWidths = [];
-          
+
           for (const id of this.allIds) {
             const meta = this.indexMap[id];
             if (!meta) continue;
-            
+
             const aspectRatio = meta.width / meta.height;
             const scaledWidth = targetHeight * aspectRatio;
             scaledWidths.push({ id, scaledWidth, aspectRatio });
             totalScaledWidth += scaledWidth;
           }
-          
+
           // 估算需要的行數（考慮間距）
-          const avgItemsPerRow = Math.round(this.containerWidth / (totalScaledWidth / scaledWidths.length));
+          const avgItemsPerRow = Math.round(
+            this.containerWidth / (totalScaledWidth / scaledWidths.length),
+          );
           const estimatedRows = Math.ceil(scaledWidths.length / avgItemsPerRow);
-          const targetItemsPerRow = Math.ceil(scaledWidths.length / estimatedRows);
-          
-          console.log(`📊 預算: ${scaledWidths.length} 個項目，約 ${estimatedRows} 行，目標每行 ${targetItemsPerRow} 個`);
-          
+          const targetItemsPerRow = Math.ceil(
+            scaledWidths.length / estimatedRows,
+          );
+
+          console.log(
+            `📊 預算: ${scaledWidths.length} 個項目，約 ${estimatedRows} 行，目標每行 ${targetItemsPerRow} 個`,
+          );
+
           // ===== 第二階段：實際分配到各行 =====
           const rows = [];
           let currentRowItems = [];
@@ -747,34 +785,45 @@
             const remainingItems = scaledWidths.length - processedCount;
             const remainingRows = estimatedRows - rows.length;
             const shouldHaveInRow = Math.ceil(remainingItems / remainingRows);
-            
+
             // 計算當前行的總間距
             const totalGapsWidth = currentRowItems.length * gap;
-            
+
             // 判斷是否應該換行：
             // 1. 加入這張圖後超過容器寬度
             // 2. 當前行已達到目標數量
-            const wouldOverflow = currentRowWidth + item.scaledWidth + totalGapsWidth > this.containerWidth;
+            // 3. 必須滿足最小項目數要求（除非剩餘項目不足）
+            const wouldOverflow =
+              currentRowWidth + item.scaledWidth + totalGapsWidth >
+              this.containerWidth;
             const reachedTarget = currentRowItems.length >= shouldHaveInRow;
-            
-            if (currentRowItems.length > 0 && (wouldOverflow || (reachedTarget && remainingRows > 1))) {
+            const hasMinItems = currentRowItems.length >= this.minItemsPerRow;
+            const remainingEnough = remainingItems >= this.minItemsPerRow;
+
+            if (
+              currentRowItems.length > 0 &&
+              hasMinItems &&
+              remainingEnough &&
+              (wouldOverflow || (reachedTarget && remainingRows > 1))
+            ) {
               // 結算當前行
-              const availableWidth = this.containerWidth - (currentRowItems.length - 1) * gap;
+              const availableWidth =
+                this.containerWidth - (currentRowItems.length - 1) * gap;
               const ratio = availableWidth / currentRowWidth;
               const finalRowHeight = targetHeight * ratio;
 
               rows.push({
-                items: currentRowItems.map(rowItem => ({
+                items: currentRowItems.map((rowItem) => ({
                   id: rowItem.id,
                   width: rowItem.scaledWidth * ratio,
                   height: finalRowHeight,
-                  aspectRatio: rowItem.aspectRatio
+                  aspectRatio: rowItem.aspectRatio,
                 })),
                 height: finalRowHeight,
-                top: cumulativeY
+                top: cumulativeY,
               });
 
-              cumulativeY += (finalRowHeight + this.rowGap);
+              cumulativeY += finalRowHeight + this.rowGap;
               processedCount += currentRowItems.length;
 
               // 開始新行
@@ -789,41 +838,44 @@
 
           // 處理最後一行（同樣填滿容器寬度）
           if (currentRowItems.length > 0) {
-            const availableWidth = this.containerWidth - (currentRowItems.length - 1) * gap;
+            const availableWidth =
+              this.containerWidth - (currentRowItems.length - 1) * gap;
             const ratio = availableWidth / currentRowWidth;
             const finalRowHeight = targetHeight * ratio;
 
             rows.push({
-              items: currentRowItems.map(item => ({
+              items: currentRowItems.map((item) => ({
                 id: item.id,
                 width: item.scaledWidth * ratio,
                 height: finalRowHeight,
-                aspectRatio: item.aspectRatio
+                aspectRatio: item.aspectRatio,
               })),
               height: finalRowHeight,
-              top: cumulativeY
+              top: cumulativeY,
             });
-            
-            cumulativeY += (finalRowHeight + this.rowGap);
+
+            cumulativeY += finalRowHeight + this.rowGap;
           }
 
           this.rows = rows;
-          console.log(`📐 Justified Layout: 計算完成 ${rows.length} 行，總高度 ${cumulativeY}px`);
-          
+          console.log(
+            `📐 Justified Layout: 計算完成 ${rows.length} 行，總高度 ${cumulativeY}px`,
+          );
+
           // 輸出每行的項目數，方便調試
-          const itemCounts = rows.map(r => r.items.length).join(', ');
+          const itemCounts = rows.map((r) => r.items.length).join(", ");
           console.log(`📊 每行項目數: [${itemCounts}]`);
-          
+
           return rows;
         }
 
         initThumbnails() {
           console.log("🖼️  準備 Justified Row Layout...");
           this.allIds = Object.keys(this.indexMap);
-          
+
           // 計算行布局
           this.calculateRows();
-          
+
           console.log(
             `✅ 準備完成：共 ${this.allIds.length} 個項目，分為 ${this.rows.length} 行`,
           );
@@ -836,7 +888,7 @@
           const row = this.rows[rowIndex];
           if (!row) return;
 
-          row.items.forEach(item => {
+          row.items.forEach((item) => {
             const id = item.id;
             if (this.loadedThumbs.has(id)) return;
 
@@ -873,7 +925,7 @@
           if (!row) return;
 
           let unloadedCount = 0;
-          row.items.forEach(item => {
+          row.items.forEach((item) => {
             const id = item.id;
             if (!this.loadedThumbs.has(id)) return;
             if (this.activeState.id === id) return; // 正在播放的不卸載
@@ -956,7 +1008,7 @@
             url: this.thumbUrls.get(id),
             width: this.indexMap[id].width,
             height: this.indexMap[id].height,
-            type: this.indexMap[id].type || 'webp', // 向下相容舊版 .bin 檔
+            type: this.indexMap[id].type || "webp", // 向下相容舊版 .bin 檔
           };
         }
 
@@ -966,7 +1018,11 @@
 
         handleTap(e) {
           const target = e.target;
-          if ((target.tagName !== "IMG" && target.tagName !== "VIDEO") || !target.dataset.id) return;
+          if (
+            (target.tagName !== "IMG" && target.tagName !== "VIDEO") ||
+            !target.dataset.id
+          )
+            return;
 
           // 如果剛剛觸發了移動雙擊，忽略這次單擊
           if (this.justDoubleTapped) {
@@ -986,7 +1042,7 @@
           this.clickTimer = setTimeout(() => {
             this.clickTimer = null;
             this.justDoubleTapped = false; // 重置標誌
-            
+
             // 點擊同一個正在播放的 -> 停止
             if (this.activeState.id === id) {
               console.log(`⏹️  停止動畫: ${id}`);
@@ -1008,7 +1064,11 @@
 
         handleDoubleTap(e) {
           const target = e.target;
-          if ((target.tagName !== "IMG" && target.tagName !== "VIDEO") || !target.dataset.id) return;
+          if (
+            (target.tagName !== "IMG" && target.tagName !== "VIDEO") ||
+            !target.dataset.id
+          )
+            return;
 
           // 阻止單擊事件執行
           if (this.clickTimer) {
@@ -1025,9 +1085,9 @@
           }
 
           // 觸發全螢幕模態框
-          const item = target.closest('.gallery-item');
+          const item = target.closest(".gallery-item");
           if (item) {
-            const fullscreenIcon = item.querySelector('.fullscreen-icon');
+            const fullscreenIcon = item.querySelector(".fullscreen-icon");
             if (fullscreenIcon) {
               fullscreenIcon.click();
             }
@@ -1037,7 +1097,11 @@
         handleTouchEnd(e) {
           // 移動設備雙擊檢測
           const target = e.target;
-          if ((target.tagName !== "IMG" && target.tagName !== "VIDEO") || !target.dataset.id) return;
+          if (
+            (target.tagName !== "IMG" && target.tagName !== "VIDEO") ||
+            !target.dataset.id
+          )
+            return;
 
           const currentTime = Date.now();
           const timeDiff = currentTime - this.lastTapTime;
@@ -1046,10 +1110,10 @@
           if (timeDiff < this.doubleTapDelay && this.lastTapTarget === target) {
             // 這是雙擊！
             e.preventDefault(); // 防止觸發其他事件
-            
+
             // 設置標誌，防止後續的 click 事件觸發單擊
             this.justDoubleTapped = true;
-            
+
             // 取消單擊計時器
             if (this.clickTimer) {
               clearTimeout(this.clickTimer);
@@ -1065,9 +1129,9 @@
             }
 
             // 觸發全螢幕模態框
-            const item = target.closest('.gallery-item');
+            const item = target.closest(".gallery-item");
             if (item) {
-              const fullscreenIcon = item.querySelector('.fullscreen-icon');
+              const fullscreenIcon = item.querySelector(".fullscreen-icon");
               if (fullscreenIcon) {
                 fullscreenIcon.click();
               }
@@ -1076,7 +1140,7 @@
             // 重置雙擊檢測
             this.lastTapTime = 0;
             this.lastTapTarget = null;
-            
+
             // 500ms 後重置標誌（防止影響下次點擊）
             setTimeout(() => {
               this.justDoubleTapped = false;
@@ -1095,8 +1159,8 @@
             return;
           }
 
-          const type = meta.type || 'webp';
-          
+          const type = meta.type || "webp";
+
           // 從 ArrayBuffer 切割動畫資料 (Zero-copy)
           const slice = this.buffer.slice(
             this.payloadStart + meta.anim.offset,
@@ -1105,33 +1169,33 @@
 
           // 根據類型建立對應的 MIME type
           const mimeTypes = {
-            'webp': 'image/webp',
-            'gif': 'image/gif',
-            'mp4': 'video/mp4'
+            webp: "image/webp",
+            gif: "image/gif",
+            mp4: "video/mp4",
           };
 
           // 建立 Blob URL
           const animUrl = URL.createObjectURL(
-            new Blob([slice], { type: mimeTypes[type] || 'image/webp' }),
+            new Blob([slice], { type: mimeTypes[type] || "image/webp" }),
           );
 
           // 取得容器中的 img 和 video 元素
-          const item = element.closest('.gallery-item');
-          const imgEl = item.querySelector('img');
-          const videoEl = item.querySelector('video');
+          const item = element.closest(".gallery-item");
+          const imgEl = item.querySelector("img");
+          const videoEl = item.querySelector("video");
 
           // 根據類型選擇使用 img 或 video
-          if (type === 'mp4') {
-            imgEl.style.display = 'none';
-            videoEl.style.display = 'block';
+          if (type === "mp4") {
+            imgEl.style.display = "none";
+            videoEl.style.display = "block";
             videoEl.src = animUrl;
             videoEl.load();
             videoEl.play();
             this.activeState = { id, element: videoEl, animUrl, type };
             this.animationObserver.observe(videoEl);
           } else {
-            videoEl.style.display = 'none';
-            imgEl.style.display = 'block';
+            videoEl.style.display = "none";
+            imgEl.style.display = "block";
             imgEl.src = animUrl;
             this.activeState = { id, element: imgEl, animUrl, type };
             this.animationObserver.observe(imgEl);
@@ -1147,38 +1211,43 @@
           this.animationObserver.unobserve(element);
 
           // 取得容器
-          const item = element.closest('.gallery-item');
+          const item = element.closest(".gallery-item");
           if (!item) {
             // 如果找不到容器（可能已被移除），只釋放 URL
             if (animUrl) {
               URL.revokeObjectURL(animUrl);
             }
-            this.activeState = { id: null, element: null, animUrl: null, type: null };
+            this.activeState = {
+              id: null,
+              element: null,
+              animUrl: null,
+              type: null,
+            };
             return;
           }
 
-          const imgEl = item.querySelector('img');
-          const videoEl = item.querySelector('video');
+          const imgEl = item.querySelector("img");
+          const videoEl = item.querySelector("video");
 
           // 根據類型恢復縮圖並完整清理資源
           const thumbUrl = this.thumbUrls.get(id);
-          if (type === 'mp4' && videoEl) {
+          if (type === "mp4" && videoEl) {
             // 停止視頻並完整清理
             videoEl.pause();
-            videoEl.removeAttribute('src');
+            videoEl.removeAttribute("src");
             videoEl.load(); // 觸發資源釋放
-            videoEl.style.display = 'none';
-            
+            videoEl.style.display = "none";
+
             if (thumbUrl && imgEl) {
               imgEl.src = thumbUrl;
-              imgEl.style.display = 'block';
+              imgEl.style.display = "block";
             }
           } else {
             if (thumbUrl && imgEl) {
               imgEl.src = thumbUrl;
             }
-            if (imgEl) imgEl.style.display = 'block';
-            if (videoEl) videoEl.style.display = 'none';
+            if (imgEl) imgEl.style.display = "block";
+            if (videoEl) videoEl.style.display = "none";
           }
 
           // 釋放動畫 Blob URL 記憶體（關鍵 GC 步驟）
@@ -1187,18 +1256,23 @@
           }
 
           // 重置狀態
-          this.activeState = { id: null, element: null, animUrl: null, type: null };
+          this.activeState = {
+            id: null,
+            element: null,
+            animUrl: null,
+            type: null,
+          };
         }
 
         getAnimationUrl(id) {
           const meta = this.indexMap[id];
           if (!meta) return null;
 
-          const type = meta.type || 'webp';
+          const type = meta.type || "webp";
           const mimeTypes = {
-            'webp': 'image/webp',
-            'gif': 'image/gif',
-            'mp4': 'video/mp4'
+            webp: "image/webp",
+            gif: "image/gif",
+            mp4: "video/mp4",
           };
 
           const slice = this.buffer.slice(
@@ -1206,7 +1280,9 @@
             this.payloadStart + meta.anim.offset + meta.anim.length,
           );
 
-          return URL.createObjectURL(new Blob([slice], { type: mimeTypes[type] || 'image/webp' }));
+          return URL.createObjectURL(
+            new Blob([slice], { type: mimeTypes[type] || "image/webp" }),
+          );
         }
 
         dispose() {
@@ -1220,7 +1296,7 @@
 
           // 停止當前播放並釋放資源
           this.stopActiveAnimation();
-          
+
           // 移除所有事件監聽器
           this.container.removeEventListener("click", this.handleTap);
           this.container.removeEventListener("dblclick", this.handleDoubleTap);
@@ -1234,13 +1310,13 @@
           }
           this.thumbUrls.clear();
           this.loadedThumbs.clear();
-          
+
           // 清理所有 video 元素（確保釋放記憶體）
           this.renderedItems.forEach(({ element }) => {
-            const videoEl = element.querySelector('video');
+            const videoEl = element.querySelector("video");
             if (videoEl) {
               videoEl.pause();
-              videoEl.removeAttribute('src');
+              videoEl.removeAttribute("src");
               videoEl.load();
             }
           });
@@ -1280,21 +1356,21 @@
         unlockHandler = () => {
           clickCount++;
           console.log(`🔒 解鎖進度: ${clickCount}/${UNLOCK_CLICKS}`);
-          
+
           if (clickCount >= UNLOCK_CLICKS) {
             // 隱藏loading，顯示upload
-            loadingEl.style.display = 'none';
-            uploadSection.style.display = 'flex';
-            
+            loadingEl.style.display = "none";
+            uploadSection.style.display = "flex";
+
             // 移除點擊監聽器
-            document.body.removeEventListener('click', unlockHandler);
+            document.body.removeEventListener("click", unlockHandler);
             unlockHandler = null;
-            
-            console.log('✅ 已解鎖上傳功能');
+
+            console.log("✅ 已解鎖上傳功能");
           }
         };
-        
-        document.body.addEventListener('click', unlockHandler);
+
+        document.body.addEventListener("click", unlockHandler);
       }
 
       // 初始化解鎖功能
@@ -1307,7 +1383,7 @@
 
         // 確保移除解鎖監聽器（如果還存在）
         if (unlockHandler) {
-          document.body.removeEventListener('click', unlockHandler);
+          document.body.removeEventListener("click", unlockHandler);
           unlockHandler = null;
         }
 
@@ -1355,8 +1431,11 @@
       // 渲染圖庫 (Justified Row Layout - 按行渲染，延遲加載圖片)
       function renderGallery() {
         const fragment = document.createDocumentFragment();
-        const totalHeight = engine.rows.length > 0 ? 
-          engine.rows[engine.rows.length - 1].top + engine.rows[engine.rows.length - 1].height : 0;
+        const totalHeight =
+          engine.rows.length > 0
+            ? engine.rows[engine.rows.length - 1].top +
+              engine.rows[engine.rows.length - 1].height
+            : 0;
 
         // 創建佔位容器（讓滾動條正確顯示）
         const spacer = document.createElement("div");
@@ -1399,7 +1478,7 @@
             video.loop = true;
             video.muted = true;
             video.playsInline = true;
-            video.style.display = 'none';
+            video.style.display = "none";
             video.style.width = "100%";
             video.style.height = "100%";
             video.style.objectFit = "cover";
@@ -1422,14 +1501,20 @@
             itemElement.appendChild(fullscreenIcon);
             rowContainer.appendChild(itemElement);
 
-            engine.renderedItems.set(item.id, { element: itemElement, isLoaded: false });
+            engine.renderedItems.set(item.id, {
+              element: itemElement,
+              isLoaded: false,
+            });
           });
 
           spacer.appendChild(rowContainer);
-          
+
           // 開始監聽這一行（而不是單個項目）
           engine.virtualObserver.observe(rowContainer);
-          engine.renderedRows.set(rowIndex, { element: rowContainer, isLoaded: false });
+          engine.renderedRows.set(rowIndex, {
+            element: rowContainer,
+            isLoaded: false,
+          });
         });
 
         galleryContainer.appendChild(spacer);
@@ -1450,21 +1535,23 @@
         currentModalUrl = engine.getAnimationUrl(id);
 
         // 根據類型選擇顯示元素
-        if (data.type === 'mp4') {
-          modalImg.style.display = 'none';
-          modalVideo.style.display = 'block';
+        if (data.type === "mp4") {
+          modalImg.style.display = "none";
+          modalVideo.style.display = "block";
           modalVideo.src = currentModalUrl;
           modalVideo.load();
           modalVideo.play();
         } else {
-          modalVideo.style.display = 'none';
-          modalImg.style.display = 'block';
+          modalVideo.style.display = "none";
+          modalImg.style.display = "block";
           modalImg.src = currentModalUrl;
         }
 
         modal.classList.add("active");
 
-        console.log(`▶️ 播放：${id} (${data.width} × ${data.height}) [${data.type.toUpperCase()}]`);
+        console.log(
+          `▶️ 播放：${id} (${data.width} × ${data.height}) [${data.type.toUpperCase()}]`,
+        );
 
         // 防止背景滾動
         document.body.style.overflow = "hidden";
@@ -1478,7 +1565,7 @@
         // 完整停止並清理視頻播放（確保 GC）
         if (modalVideo.src) {
           modalVideo.pause();
-          modalVideo.removeAttribute('src');
+          modalVideo.removeAttribute("src");
           modalVideo.load(); // 觸發資源釋放
         }
 
@@ -1494,8 +1581,8 @@
         }
 
         // 重置顯示狀態
-        modalImg.style.display = 'none';
-        modalVideo.style.display = 'none';
+        modalImg.style.display = "none";
+        modalVideo.style.display = "none";
 
         console.log("⏹️ 停止播放 - 資源已釋放");
       }
@@ -1553,17 +1640,17 @@
       // 頁面卸載時清理資源（確保最高效能 GC）
       window.addEventListener("beforeunload", () => {
         // 關閉模態框並清理
-        if (modal.classList.contains('active')) {
+        if (modal.classList.contains("active")) {
           closeModal();
         }
-        
+
         // 銷毀引擎（會自動清理所有資源）
         engine.dispose();
-        
+
         // 額外確保模態框資源被釋放
         if (modalVideo.src) {
           modalVideo.pause();
-          modalVideo.removeAttribute('src');
+          modalVideo.removeAttribute("src");
           modalVideo.load();
         }
         if (modalImg.src) {
@@ -1573,7 +1660,7 @@
           URL.revokeObjectURL(currentModalUrl);
           currentModalUrl = null;
         }
-        
+
         console.log("🚪 頁面卸載 - 所有資源已清理");
       });
 
