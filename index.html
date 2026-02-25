@@ -164,10 +164,17 @@
       }
 
       #gallery {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        gap: 5px;
+        position: relative;
+        width: 100%;
         margin-top: 50px;
+        min-height: 100vh;
+      }
+
+      .gallery-row {
+        position: absolute;
+        display: flex;
+        gap: 5px;
+        width: 100%;
       }
 
       .gallery-item {
@@ -178,7 +185,6 @@
         position: relative;
         animation: fadeIn 0.5s ease-out backwards;
         cursor: pointer;
-        min-height: 150px;
         touch-action: manipulation; /* 禁用雙擊縮放，加速雙擊響應 */
       }
 
@@ -361,8 +367,11 @@
         }
 
         #gallery {
-          grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-          gap: 5px;
+          margin-top: 40px;
+        }
+
+        .gallery-row {
+          gap: 3px;
         }
 
         .modal-content img {
@@ -499,8 +508,17 @@
           this.doubleTapDelay = 300; // 300ms 內視為雙擊
           this.justDoubleTapped = false; // 標記是否剛剛雙擊（防止觸發單擊）
 
-          // Virtual Scroller 狀態
+          // Justified Row Layout 配置（響應式調整）
+          const isMobile = window.innerWidth <= 600;
+          this.targetRowHeight = isMobile ? 120 : 200; // 目標行高（px）：移動端 120px，桌面 200px
+          this.rowGap = isMobile ? 3 : 5; // 行間距（px）
+          this.itemGap = isMobile ? 3 : 5; // 項目間距（px）
+          this.containerWidth = 0;
+
+          // Virtual Scroller 狀態（行級別）
           this.allIds = [];
+          this.rows = []; // 行數據：{items: [{id, width, height}], height, top}
+          this.renderedRows = new Map(); // rowIndex -> {element, isLoaded}
           this.renderedItems = new Map(); // id -> {element, isLoaded}
           this.loadedThumbs = new Set(); // 已加載的縮圖 ID
 
@@ -519,24 +537,24 @@
             { threshold: 0 },
           );
 
-          // Virtual Scroller 觀察器 - 管理所有圖片的加載與卸載
+          // Virtual Scroller 觀察器 - 按行管理圖片的加載與卸載
           this.virtualObserver = new IntersectionObserver(
             (entries) => {
               entries.forEach((entry) => {
-                const id = entry.target.dataset.id;
-                if (!id) return;
+                const rowIndex = parseInt(entry.target.dataset.rowIndex);
+                if (isNaN(rowIndex)) return;
 
                 if (entry.isIntersecting) {
-                  // 進入視窗 - 加載縮圖
-                  this.loadThumbnail(id, entry.target);
+                  // 進入視窗 - 加載這一行的所有縮圖
+                  this.loadRow(rowIndex, entry.target);
                 } else {
-                  // 離開視窗 - 卸載圖片（但保留 DOM 結構）
-                  this.unloadThumbnail(id, entry.target);
+                  // 離開視窗 - 卸載這一行的所有圖片
+                  this.unloadRow(rowIndex, entry.target);
                 }
               });
             },
             {
-              rootMargin: "200px", // 提前 200px 開始加載
+              rootMargin: "400px", // 提前 400px 開始加載（行級別需要更大緩衝）
               threshold: 0,
             },
           );
@@ -686,12 +704,199 @@
           }
         }
 
+        /**
+         * 計算 Justified Row Layout
+         * 將所有圖片按行分組，確保每行寬度填滿容器
+         * 使用智能分配算法，讓每行圖片數量盡可能接近，避免最後一行過少
+         */
+        calculateRows() {
+          this.containerWidth = this.container.clientWidth || window.innerWidth - 40;
+          const targetHeight = this.targetRowHeight;
+          const gap = this.itemGap;
+          
+          // ===== 第一階段：預算行數和平均每行項目數 =====
+          let totalScaledWidth = 0;
+          const scaledWidths = [];
+          
+          for (const id of this.allIds) {
+            const meta = this.indexMap[id];
+            if (!meta) continue;
+            
+            const aspectRatio = meta.width / meta.height;
+            const scaledWidth = targetHeight * aspectRatio;
+            scaledWidths.push({ id, scaledWidth, aspectRatio });
+            totalScaledWidth += scaledWidth;
+          }
+          
+          // 估算需要的行數（考慮間距）
+          const avgItemsPerRow = Math.round(this.containerWidth / (totalScaledWidth / scaledWidths.length));
+          const estimatedRows = Math.ceil(scaledWidths.length / avgItemsPerRow);
+          const targetItemsPerRow = Math.ceil(scaledWidths.length / estimatedRows);
+          
+          console.log(`📊 預算: ${scaledWidths.length} 個項目，約 ${estimatedRows} 行，目標每行 ${targetItemsPerRow} 個`);
+          
+          // ===== 第二階段：實際分配到各行 =====
+          const rows = [];
+          let currentRowItems = [];
+          let currentRowWidth = 0;
+          let cumulativeY = 0;
+          let processedCount = 0;
+
+          for (let i = 0; i < scaledWidths.length; i++) {
+            const item = scaledWidths[i];
+            const remainingItems = scaledWidths.length - processedCount;
+            const remainingRows = estimatedRows - rows.length;
+            const shouldHaveInRow = Math.ceil(remainingItems / remainingRows);
+            
+            // 計算當前行的總間距
+            const totalGapsWidth = currentRowItems.length * gap;
+            
+            // 判斷是否應該換行：
+            // 1. 加入這張圖後超過容器寬度
+            // 2. 當前行已達到目標數量
+            const wouldOverflow = currentRowWidth + item.scaledWidth + totalGapsWidth > this.containerWidth;
+            const reachedTarget = currentRowItems.length >= shouldHaveInRow;
+            
+            if (currentRowItems.length > 0 && (wouldOverflow || (reachedTarget && remainingRows > 1))) {
+              // 結算當前行
+              const availableWidth = this.containerWidth - (currentRowItems.length - 1) * gap;
+              const ratio = availableWidth / currentRowWidth;
+              const finalRowHeight = targetHeight * ratio;
+
+              rows.push({
+                items: currentRowItems.map(rowItem => ({
+                  id: rowItem.id,
+                  width: rowItem.scaledWidth * ratio,
+                  height: finalRowHeight,
+                  aspectRatio: rowItem.aspectRatio
+                })),
+                height: finalRowHeight,
+                top: cumulativeY
+              });
+
+              cumulativeY += (finalRowHeight + this.rowGap);
+              processedCount += currentRowItems.length;
+
+              // 開始新行
+              currentRowItems = [item];
+              currentRowWidth = item.scaledWidth;
+            } else {
+              // 繼續添加到當前行
+              currentRowItems.push(item);
+              currentRowWidth += item.scaledWidth;
+            }
+          }
+
+          // 處理最後一行（同樣填滿容器寬度）
+          if (currentRowItems.length > 0) {
+            const availableWidth = this.containerWidth - (currentRowItems.length - 1) * gap;
+            const ratio = availableWidth / currentRowWidth;
+            const finalRowHeight = targetHeight * ratio;
+
+            rows.push({
+              items: currentRowItems.map(item => ({
+                id: item.id,
+                width: item.scaledWidth * ratio,
+                height: finalRowHeight,
+                aspectRatio: item.aspectRatio
+              })),
+              height: finalRowHeight,
+              top: cumulativeY
+            });
+            
+            cumulativeY += (finalRowHeight + this.rowGap);
+          }
+
+          this.rows = rows;
+          console.log(`📐 Justified Layout: 計算完成 ${rows.length} 行，總高度 ${cumulativeY}px`);
+          
+          // 輸出每行的項目數，方便調試
+          const itemCounts = rows.map(r => r.items.length).join(', ');
+          console.log(`📊 每行項目數: [${itemCounts}]`);
+          
+          return rows;
+        }
+
         initThumbnails() {
-          console.log("🖼️  準備 Virtual Scroller (延遲加載模式)...");
+          console.log("🖼️  準備 Justified Row Layout...");
           this.allIds = Object.keys(this.indexMap);
+          
+          // 計算行布局
+          this.calculateRows();
+          
           console.log(
-            `✅ 準備完成：共 ${this.allIds.length} 個項目（僅可視範圍會加載）`,
+            `✅ 準備完成：共 ${this.allIds.length} 個項目，分為 ${this.rows.length} 行`,
           );
+        }
+
+        /**
+         * 加載一整行的所有縮圖
+         */
+        loadRow(rowIndex, rowElement) {
+          const row = this.rows[rowIndex];
+          if (!row) return;
+
+          row.items.forEach(item => {
+            const id = item.id;
+            if (this.loadedThumbs.has(id)) return;
+
+            const meta = this.indexMap[id];
+            if (!meta) return;
+
+            const slice = this.buffer.slice(
+              this.payloadStart + meta.thumb.offset,
+              this.payloadStart + meta.thumb.offset + meta.thumb.length,
+            );
+            const thumbUrl = URL.createObjectURL(
+              new Blob([slice], { type: "image/webp" }),
+            );
+            this.thumbUrls.set(id, thumbUrl);
+            this.loadedThumbs.add(id);
+
+            // 更新 DOM
+            const itemElement = rowElement.querySelector(`[data-id="${id}"]`);
+            const img = itemElement?.querySelector("img");
+            if (img) {
+              img.src = thumbUrl;
+              itemElement.classList.remove("placeholder");
+            }
+          });
+
+          console.log(`✅ 加載第 ${rowIndex} 行 (${row.items.length} 個項目)`);
+        }
+
+        /**
+         * 卸載一整行的所有縮圖
+         */
+        unloadRow(rowIndex, rowElement) {
+          const row = this.rows[rowIndex];
+          if (!row) return;
+
+          let unloadedCount = 0;
+          row.items.forEach(item => {
+            const id = item.id;
+            if (!this.loadedThumbs.has(id)) return;
+            if (this.activeState.id === id) return; // 正在播放的不卸載
+
+            const thumbUrl = this.thumbUrls.get(id);
+            if (thumbUrl) {
+              URL.revokeObjectURL(thumbUrl);
+              this.thumbUrls.delete(id);
+            }
+            this.loadedThumbs.delete(id);
+
+            const itemElement = rowElement.querySelector(`[data-id="${id}"]`);
+            const img = itemElement?.querySelector("img");
+            if (img) {
+              img.src = "";
+              itemElement.classList.add("placeholder");
+              unloadedCount++;
+            }
+          });
+
+          if (unloadedCount > 0) {
+            console.log(`🗑️  卸載第 ${rowIndex} 行 (${unloadedCount} 個項目)`);
+          }
         }
 
         loadThumbnail(id, itemElement) {
@@ -1122,8 +1327,8 @@
             `📊 檔案大小：${(engine.buffer.byteLength / 1024 / 1024).toFixed(2)} MB`,
           );
 
-          // 渲染圖庫 (Virtual Scroller)
-          renderGallery(ids);
+          // 渲染圖庫 (Justified Row Layout)
+          renderGallery();
 
           // 顯示銷毀按鈕
           destroyBtn.classList.add("visible");
@@ -1147,55 +1352,89 @@
         }
       });
 
-      // 渲染圖庫 (Virtual Scroller - 只創建 DOM 骨架，延遲加載圖片)
-      function renderGallery(ids) {
+      // 渲染圖庫 (Justified Row Layout - 按行渲染，延遲加載圖片)
+      function renderGallery() {
         const fragment = document.createDocumentFragment();
+        const totalHeight = engine.rows.length > 0 ? 
+          engine.rows[engine.rows.length - 1].top + engine.rows[engine.rows.length - 1].height : 0;
 
-        ids.forEach((id) => {
-          const item = document.createElement("div");
-          item.className = "gallery-item placeholder";
-          item.dataset.id = id;
+        // 創建佔位容器（讓滾動條正確顯示）
+        const spacer = document.createElement("div");
+        spacer.style.height = `${totalHeight}px`;
+        spacer.style.position = "relative";
+        spacer.id = "gallery-spacer";
 
-          const img = document.createElement("img");
-          img.alt = id;
-          img.dataset.id = id;
-          // 不設置 src - 等待 IntersectionObserver 觸發加載
+        engine.rows.forEach((row, rowIndex) => {
+          const rowContainer = document.createElement("div");
+          rowContainer.className = "gallery-row";
+          rowContainer.dataset.rowIndex = rowIndex;
+          rowContainer.style.position = "absolute";
+          rowContainer.style.top = `${row.top}px`;
+          rowContainer.style.left = "0";
+          rowContainer.style.width = "100%";
+          rowContainer.style.height = `${row.height}px`;
+          rowContainer.style.display = "flex";
+          rowContainer.style.gap = `${engine.itemGap}px`;
 
-          // 為 MP4 格式添加 video 元素
-          const video = document.createElement("video");
-          video.alt = id;
-          video.dataset.id = id;
-          video.loop = true;
-          video.muted = true;
-          video.playsInline = true;
-          video.style.display = 'none';
+          row.items.forEach((item) => {
+            const itemElement = document.createElement("div");
+            itemElement.className = "gallery-item placeholder";
+            itemElement.dataset.id = item.id;
+            itemElement.style.flex = `0 0 ${item.width}px`;
+            itemElement.style.height = `${row.height}px`;
+            itemElement.style.position = "relative";
 
-          // 右下角全屏圖標
-          const fullscreenIcon = document.createElement("div");
-          fullscreenIcon.className = "fullscreen-icon";
-          fullscreenIcon.innerHTML = `
+            const img = document.createElement("img");
+            img.alt = item.id;
+            img.dataset.id = item.id;
+            img.style.width = "100%";
+            img.style.height = "100%";
+            img.style.objectFit = "cover";
+            // 不設置 src - 等待 IntersectionObserver 觸發加載
+
+            // 為 MP4 格式添加 video 元素
+            const video = document.createElement("video");
+            video.alt = item.id;
+            video.dataset.id = item.id;
+            video.loop = true;
+            video.muted = true;
+            video.playsInline = true;
+            video.style.display = 'none';
+            video.style.width = "100%";
+            video.style.height = "100%";
+            video.style.objectFit = "cover";
+
+            // 右下角全屏圖標
+            const fullscreenIcon = document.createElement("div");
+            fullscreenIcon.className = "fullscreen-icon";
+            fullscreenIcon.innerHTML = `
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
             <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
           </svg>
         `;
-          fullscreenIcon.onclick = (e) => {
-            e.stopPropagation();
-            openModal(id);
-          };
+            fullscreenIcon.onclick = (e) => {
+              e.stopPropagation();
+              openModal(item.id);
+            };
 
-          item.appendChild(img);
-          item.appendChild(video);
-          item.appendChild(fullscreenIcon);
-          fragment.appendChild(item);
+            itemElement.appendChild(img);
+            itemElement.appendChild(video);
+            itemElement.appendChild(fullscreenIcon);
+            rowContainer.appendChild(itemElement);
 
-          // 開始監聽這個項目
-          engine.virtualObserver.observe(item);
-          engine.renderedItems.set(id, { element: item, isLoaded: false });
+            engine.renderedItems.set(item.id, { element: itemElement, isLoaded: false });
+          });
+
+          spacer.appendChild(rowContainer);
+          
+          // 開始監聽這一行（而不是單個項目）
+          engine.virtualObserver.observe(rowContainer);
+          engine.renderedRows.set(rowIndex, { element: rowContainer, isLoaded: false });
         });
 
-        galleryContainer.appendChild(fragment);
+        galleryContainer.appendChild(spacer);
         console.log(
-          `📦 Virtual Scroller: 已創建 ${ids.length} 個 DOM 容器 (圖片按需加載)`,
+          `📦 Justified Layout: 已創建 ${engine.rows.length} 行 (共 ${engine.allIds.length} 個項目，圖片按需加載)`,
         );
       }
 
