@@ -638,10 +638,16 @@
 
           // 6. 使用 Web Crypto API 計算 HMAC-SHA256
           console.log("🔐 正在驗證檔案簽名...");
+          
+          // 檢查 Web Crypto API 是否可用
+          if (!window.crypto || !window.crypto.subtle) {
+            throw new Error("您的瀏覽器不支援 Web Crypto API，或當前頁面不是安全上下文（需要 HTTPS 或 localhost）");
+          }
+          
           const encoder = new TextEncoder();
           const keyData = encoder.encode(this.signatureConfig.secretKey);
 
-          const cryptoKey = await crypto.subtle.importKey(
+          const cryptoKey = await window.crypto.subtle.importKey(
             "raw",
             keyData,
             { name: "HMAC", hash: this.signatureConfig.algorithm },
@@ -649,7 +655,7 @@
             ["sign"],
           );
 
-          const calculatedSignature = await crypto.subtle.sign(
+          const calculatedSignature = await window.crypto.subtle.sign(
             "HMAC",
             cryptoKey,
             dataBuffer,
@@ -735,136 +741,176 @@
         }
 
         /**
-         * 計算 Justified Row Layout
-         * 將所有圖片按行分組，確保每行寬度填滿容器
-         * 使用智能分配算法，讓每行圖片數量盡可能接近，避免最後一行過少
+         * 計算一行的成本（高度偏差）
+         * 成本越低，代表高度越接近理想範圍（基於 Dijkstra 最短路徑思想）
+         */
+        _getCost(items, startIdx, endIdx) {
+          if (startIdx >= endIdx) return Infinity;
+          
+          const rowItems = items.slice(startIdx, endIdx);
+          const gap = this.itemGap;
+          
+          // 計算這一行的總寬高比
+          const totalAspectRatio = rowItems.reduce(
+            (sum, item) => sum + item.aspectRatio,
+            0
+          );
+          
+          // 計算實際高度（填滿容器寬度時的高度）
+          const availableWidth = this.containerWidth - gap * (rowItems.length - 1);
+          const actualHeight = availableWidth / totalAspectRatio;
+          
+          // 理想範圍：允許 ±15% 彈性
+          const minHeight = this.targetRowHeight * 0.85;
+          const maxHeight = this.targetRowHeight * 1.15;
+          
+          // 計算成本（與文檔算法一致）
+          if (actualHeight < minHeight) {
+            // 太矮，成本為差距
+            return minHeight - actualHeight;
+          } else if (actualHeight > maxHeight) {
+            // 太高，成本為差距
+            return actualHeight - maxHeight;
+          } else {
+            // 在範圍內，成本為與目標的偏差（權重降低）
+            return Math.abs(actualHeight - this.targetRowHeight) * 0.1;
+          }
+        }
+
+        /**
+         * 使用動態規劃計算最佳分組
+         * 基於 Dijkstra 最短路徑算法，找出總成本最低的分組方式
+         */
+        _findOptimalPartition(items) {
+          const n = items.length;
+          if (n === 0) return [];
+          
+          const isMobile = window.innerWidth <= 600;
+          const minItemsPerRow = this.minItemsPerRow;
+          // 最大每行項目數：避免圖片太小
+          const maxItemsPerRow = isMobile 
+            ? 5 
+            : Math.min(8, Math.ceil(this.containerWidth / (this.targetRowHeight * 0.6)));
+          
+          // dp[i] = 到索引 i 為止的最小總成本
+          const dp = new Array(n + 1).fill(Infinity);
+          const parent = new Array(n + 1).fill(-1); // 記錄路徑（用於回溯）
+          dp[0] = 0;
+          
+          // 動態規劃：對每個位置，嘗試所有可能的行分割
+          for (let i = 0; i < n; i++) {
+            if (dp[i] === Infinity) continue;
+            
+            // 嘗試從 i 開始，到 j 結束的一行
+            for (let j = i + minItemsPerRow; j <= Math.min(n, i + maxItemsPerRow); j++) {
+              const cost = this._getCost(items, i, j);
+              
+              if (cost === Infinity) continue;
+              
+              // 成本平方，放大差異（與文檔算法一致）
+              const totalCost = dp[i] + Math.pow(cost, 2);
+              
+              if (totalCost < dp[j]) {
+                dp[j] = totalCost;
+                parent[j] = i;
+              }
+            }
+          }
+          
+          // 回溯路徑，獲取最佳分組
+          const partition = [];
+          let current = n;
+          
+          while (current > 0 && parent[current] !== -1) {
+            partition.unshift({ start: parent[current], end: current });
+            current = parent[current];
+          }
+          
+          // 如果無法完整分組（理論上不會發生），使用貪心補救
+          if (current !== 0) {
+            console.warn('⚠️ DP 無法完整分組，使用貪心補救');
+            partition.unshift({ start: 0, end: current });
+          }
+          
+          console.log(`🎯 最佳分組：${partition.length} 行，總成本：${dp[n].toFixed(2)}`);
+          return partition;
+        }
+
+        /**
+         * 計算 Justified Row Layout（進階版）
+         * 使用動態規劃找出最佳行分組，確保視覺平衡
+         * 基於 Dijkstra 最短路徑算法優化
          */
         calculateRows() {
-          // 計算可用寬度（扣除左右 padding）
+          // 計算可用寬度
           const fullWidth = this.container.clientWidth || window.innerWidth;
           this.containerWidth = fullWidth - this.paddingX * 2;
-          const targetHeight = this.targetRowHeight;
           const gap = this.itemGap;
 
-          // ===== 第一階段：預算行數和平均每行項目數 =====
-          let totalScaledWidth = 0;
-          const scaledWidths = [];
-
+          // 準備數據（包含寬高比）
+          const items = [];
           for (const id of this.allIds) {
             const meta = this.indexMap[id];
             if (!meta) continue;
-
-            const aspectRatio = meta.width / meta.height;
-            const scaledWidth = targetHeight * aspectRatio;
-            scaledWidths.push({ id, scaledWidth, aspectRatio });
-            totalScaledWidth += scaledWidth;
+            
+            items.push({
+              id,
+              aspectRatio: meta.width / meta.height,
+              meta
+            });
           }
 
-          // 估算需要的行數（考慮間距）
-          const avgItemsPerRow = Math.round(
-            this.containerWidth / (totalScaledWidth / scaledWidths.length),
-          );
-          const estimatedRows = Math.ceil(scaledWidths.length / avgItemsPerRow);
-          const targetItemsPerRow = Math.ceil(
-            scaledWidths.length / estimatedRows,
-          );
+          console.log(`📐 開始計算 Justified Layout：${items.length} 個項目`);
 
-          console.log(
-            `📊 預算: ${scaledWidths.length} 個項目，約 ${estimatedRows} 行，目標每行 ${targetItemsPerRow} 個`,
-          );
-
-          // ===== 第二階段：實際分配到各行 =====
+          // 使用動態規劃找出最佳分組（核心算法）
+          const partition = this._findOptimalPartition(items);
+          
+          // 根據分組生成行數據
           const rows = [];
-          let currentRowItems = [];
-          let currentRowWidth = 0;
           let cumulativeY = 0;
-          let processedCount = 0;
 
-          for (let i = 0; i < scaledWidths.length; i++) {
-            const item = scaledWidths[i];
-            const remainingItems = scaledWidths.length - processedCount;
-            const remainingRows = estimatedRows - rows.length;
-            const shouldHaveInRow = Math.ceil(remainingItems / remainingRows);
-
-            // 計算當前行的總間距
-            const totalGapsWidth = currentRowItems.length * gap;
-
-            // 判斷是否應該換行：
-            // 1. 加入這張圖後超過容器寬度
-            // 2. 當前行已達到目標數量
-            // 3. 必須滿足最小項目數要求（除非剩餘項目不足）
-            const wouldOverflow =
-              currentRowWidth + item.scaledWidth + totalGapsWidth >
-              this.containerWidth;
-            const reachedTarget = currentRowItems.length >= shouldHaveInRow;
-            const hasMinItems = currentRowItems.length >= this.minItemsPerRow;
-            const remainingEnough = remainingItems >= this.minItemsPerRow;
-
-            if (
-              currentRowItems.length > 0 &&
-              hasMinItems &&
-              remainingEnough &&
-              (wouldOverflow || (reachedTarget && remainingRows > 1))
-            ) {
-              // 結算當前行
-              const availableWidth =
-                this.containerWidth - (currentRowItems.length - 1) * gap;
-              const ratio = availableWidth / currentRowWidth;
-              const finalRowHeight = targetHeight * ratio;
-
-              rows.push({
-                items: currentRowItems.map((rowItem) => ({
-                  id: rowItem.id,
-                  width: rowItem.scaledWidth * ratio,
-                  height: finalRowHeight,
-                  aspectRatio: rowItem.aspectRatio,
-                })),
-                height: finalRowHeight,
-                top: cumulativeY,
-              });
-
-              cumulativeY += finalRowHeight + this.rowGap;
-              processedCount += currentRowItems.length;
-
-              // 開始新行
-              currentRowItems = [item];
-              currentRowWidth = item.scaledWidth;
-            } else {
-              // 繼續添加到當前行
-              currentRowItems.push(item);
-              currentRowWidth += item.scaledWidth;
+          partition.forEach((part, rowIndex) => {
+            const rowItems = items.slice(part.start, part.end);
+            
+            // 計算這一行的實際高度
+            const totalAspectRatio = rowItems.reduce(
+              (sum, item) => sum + item.aspectRatio,
+              0
+            );
+            const availableWidth = this.containerWidth - gap * (rowItems.length - 1);
+            let actualHeight = availableWidth / totalAspectRatio;
+            
+            // 特殊處理：避免最後一行過高（文檔建議）
+            if (rowIndex === partition.length - 1 && rowItems.length < this.minItemsPerRow) {
+              actualHeight = Math.min(actualHeight, this.targetRowHeight * 1.1);
             }
-          }
-
-          // 處理最後一行（同樣填滿容器寬度）
-          if (currentRowItems.length > 0) {
-            const availableWidth =
-              this.containerWidth - (currentRowItems.length - 1) * gap;
-            const ratio = availableWidth / currentRowWidth;
-            const finalRowHeight = targetHeight * ratio;
-
+            
             rows.push({
-              items: currentRowItems.map((item) => ({
+              items: rowItems.map(item => ({
                 id: item.id,
-                width: item.scaledWidth * ratio,
-                height: finalRowHeight,
-                aspectRatio: item.aspectRatio,
+                width: item.aspectRatio * actualHeight,
+                height: actualHeight,
+                aspectRatio: item.aspectRatio
               })),
-              height: finalRowHeight,
-              top: cumulativeY,
+              height: actualHeight,
+              top: cumulativeY
             });
 
-            cumulativeY += finalRowHeight + this.rowGap;
-          }
+            cumulativeY += actualHeight + this.rowGap;
+          });
 
           this.rows = rows;
-          console.log(
-            `📐 Justified Layout: 計算完成 ${rows.length} 行，總高度 ${cumulativeY}px`,
+          
+          // 統計信息
+          const itemCounts = rows.map(r => r.items.length).join(", ");
+          const avgHeight = rows.reduce((sum, r) => sum + r.height, 0) / rows.length;
+          const heightStdDev = Math.sqrt(
+            rows.reduce((sum, r) => sum + Math.pow(r.height - avgHeight, 2), 0) / rows.length
           );
-
-          // 輸出每行的項目數，方便調試
-          const itemCounts = rows.map((r) => r.items.length).join(", ");
+          
+          console.log(`✓ 計算完成：${rows.length} 行，總高度 ${cumulativeY.toFixed(0)}px`);
           console.log(`📊 每行項目數: [${itemCounts}]`);
+          console.log(`📏 高度統計: 平均 ${avgHeight.toFixed(0)}px，標準差 ${heightStdDev.toFixed(1)}px (目標: ${this.targetRowHeight}px)`);
 
           return rows;
         }
