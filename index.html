@@ -567,7 +567,8 @@
               });
             },
             {
-              rootMargin: "400px", // 提前 400px 開始加載（行級別需要更大緩衝）
+              // 根據設備類型調整預加載範圍
+              rootMargin: window.innerWidth <= 600 ? "300px" : "500px",
               threshold: 0,
             },
           );
@@ -925,6 +926,22 @@
           console.log(
             `✅ 準備完成：共 ${this.allIds.length} 個項目，分為 ${this.rows.length} 行`,
           );
+          console.log(
+            `📊 Virtual Scroller 已啟用 - 圖片將按需加載`,
+          );
+        }
+
+        /**
+         * 獲取當前內存統計
+         */
+        getMemoryStats() {
+          return {
+            totalItems: this.allIds.length,
+            loadedThumbs: this.loadedThumbs.size,
+            activeRows: Array.from(this.renderedRows.values()).filter(r => r.isLoaded).length,
+            totalRows: this.rows.length,
+            loadPercentage: ((this.loadedThumbs.size / this.allIds.length) * 100).toFixed(1),
+          };
         }
 
         /**
@@ -934,6 +951,11 @@
           const row = this.rows[rowIndex];
           if (!row) return;
 
+          // 檢查行狀態，避免重複加載
+          const rowState = this.renderedRows.get(rowIndex);
+          if (rowState && rowState.isLoaded) return;
+
+          let loadedCount = 0;
           row.items.forEach((item) => {
             const id = item.id;
             if (this.loadedThumbs.has(id)) return;
@@ -957,10 +979,18 @@
             if (img) {
               img.src = thumbUrl;
               itemElement.classList.remove("placeholder");
+              loadedCount++;
             }
           });
 
-          console.log(`✅ 加載第 ${rowIndex} 行 (${row.items.length} 個項目)`);
+          // 標記這一行已加載
+          if (rowState) {
+            rowState.isLoaded = true;
+          }
+
+          if (loadedCount > 0) {
+            console.log(`✅ 加載第 ${rowIndex} 行 (${loadedCount}/${row.items.length} 個項目)`);
+          }
         }
 
         /**
@@ -969,6 +999,10 @@
         unloadRow(rowIndex, rowElement) {
           const row = this.rows[rowIndex];
           if (!row) return;
+
+          // 檢查行狀態，避免重複卸載
+          const rowState = this.renderedRows.get(rowIndex);
+          if (rowState && !rowState.isLoaded) return;
 
           let unloadedCount = 0;
           row.items.forEach((item) => {
@@ -992,8 +1026,13 @@
             }
           });
 
+          // 標記這一行已卸載
+          if (rowState) {
+            rowState.isLoaded = false;
+          }
+
           if (unloadedCount > 0) {
-            console.log(`🗑️  卸載第 ${rowIndex} 行 (${unloadedCount} 個項目)`);
+            console.log(`🗑️  卸載第 ${rowIndex} 行 (${unloadedCount}/${row.items.length} 個項目)`);
           }
         }
 
@@ -1666,9 +1705,10 @@
         }
       });
 
-      // 監聽動畫狀態變化
+      // 監聽動畫狀態變化和內存統計
       function observeActiveState() {
         let lastActiveId = null;
+        let statsCounter = 0;
 
         setInterval(() => {
           const currentId = engine.activeState.id;
@@ -1679,6 +1719,16 @@
               console.log("⏸️ 無播放中的動畫");
             }
             lastActiveId = currentId;
+          }
+
+          // 每 50 次循環（5 秒）輸出一次內存統計
+          statsCounter++;
+          if (statsCounter >= 50) {
+            const stats = engine.getMemoryStats();
+            console.log(
+              `📊 Virtual Scroller 統計: ${stats.loadedThumbs}/${stats.totalItems} 已加載 (${stats.loadPercentage}%) | ${stats.activeRows}/${stats.totalRows} 行可見`,
+            );
+            statsCounter = 0;
           }
         }, 100);
       }
@@ -1709,6 +1759,30 @@
 
         console.log("🚪 頁面卸載 - 所有資源已清理");
       });
+
+      // ==================== 調試工具 ====================
+      // 提供全局函數供開發者使用
+      window.getMemoryStats = () => {
+        const stats = engine.getMemoryStats();
+        console.log("📊 Virtual Scroller 詳細統計:");
+        console.log(`  總項目數: ${stats.totalItems}`);
+        console.log(`  已加載縮圖: ${stats.loadedThumbs} (${stats.loadPercentage}%)`);
+        console.log(`  可見行數: ${stats.activeRows}/${stats.totalRows}`);
+        console.log(`  內存節省: ${(100 - parseFloat(stats.loadPercentage)).toFixed(1)}%`);
+        
+        // 如果瀏覽器支援，顯示實際內存使用
+        if (performance.memory) {
+          const usedMB = (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(2);
+          const totalMB = (performance.memory.totalJSHeapSize / 1024 / 1024).toFixed(2);
+          console.log(`  JS 堆內存: ${usedMB}MB / ${totalMB}MB`);
+        }
+        
+        return stats;
+      };
+
+      // 提示開發者可用的調試命令
+      console.log("💡 調試命令: 在控制台輸入 getMemoryStats() 查看詳細統計");
+
 
       // ==================== PWA 支援 ====================
       if ("serviceWorker" in navigator) {
